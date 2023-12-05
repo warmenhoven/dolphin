@@ -91,11 +91,7 @@ public:
   }
 };
 
-<<<<<<< HEAD
-class NullRenderer : public Null::Renderer
-=======
 class NullGfx : public Null::NullGfx
->>>>>>> e2fc4c7ca3 (Fix compile errors)
 {
 public:
   void ShowImage(const AbstractTexture* source_texture,

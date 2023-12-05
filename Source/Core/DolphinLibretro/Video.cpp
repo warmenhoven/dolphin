@@ -32,6 +32,7 @@
 #include "Core/Core.h"
 #include "Core/Host.h"
 #include "DolphinLibretro/Options.h"
+#include "VideoBackends/OGL/OGLGfx.h"
 #include "VideoCommon/AsyncRequests.h"
 #include "VideoCommon/Fifo.h"
 #include "VideoCommon/RenderBase.h"
@@ -150,7 +151,7 @@ static void ContextDestroy(void)
 
   if (Config::Get(Config::MAIN_GFX_BACKEND) == "OGL")
   {
-    //static_cast<OGL::Renderer*>(g_renderer.get())->SetSystemFrameBuffer(0);
+    static_cast<OGL::OGLGfx*>(g_gfx.get())->SetSystemFrameBuffer(0);
   }
 
   g_video_backend->Shutdown();
@@ -174,13 +175,8 @@ static void ContextDestroy(void)
 #endif
     break;
   case RETRO_HW_CONTEXT_VULKAN:
-<<<<<<< HEAD
 #if !defined(__APPLE__) && defined(HAS_VULKAN)
     Vk::SetHWRenderInterface(nullptr);
-=======
-#ifndef __APPLE__
-    //Vk::SetHWRenderInterface(nullptr);
->>>>>>> 9aaf0fb5d3 (Fix compile errors)
 #endif
     break;
   case RETRO_HW_CONTEXT_OPENGL:
