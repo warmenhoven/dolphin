@@ -112,9 +112,9 @@ Option<bool>::Option(const char* id, const char* name, bool initial) : m_id(id),
   Register();
 }
 
-Option<std::string> renderer("dolphin_renderer", "Renderer", {"Hardware", "Software"
+Option<std::string> renderer("dolphin_renderer", "Renderer", {"Hardware"
 #if defined(_DEBUG) || defined(DEBUGFAST)
-    , "Null"
+    , "Software", "Null"
 #endif
 });
 Option<int> efbScale("dolphin_efb_scale", "Internal Resolution", 1,
