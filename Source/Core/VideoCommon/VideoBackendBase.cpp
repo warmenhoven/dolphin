@@ -208,7 +208,9 @@ void VideoBackendBase::PopulateList()
   g_available_video_backends.push_back(std::make_unique<DX11::VideoBackend>());
   g_available_video_backends.push_back(std::make_unique<DX12::VideoBackend>());
 #endif
+#ifdef USE_VULKAN
   g_available_video_backends.push_back(std::make_unique<Vulkan::VideoBackend>());
+#endif
 #ifdef HAS_OPENGL
   g_available_video_backends.push_back(std::make_unique<SW::VideoSoftware>());
 #endif
