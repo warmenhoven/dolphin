@@ -570,7 +570,7 @@ add_subdirectory(Externals/imgui)
 add_subdirectory(Externals/glslang)
 
 if(ENABLE_VULKAN)
-  add_definitions(-DUSE_VULKAN)
+  add_definitions(-DHAS_VULKAN)
 endif()
 
 find_package(pugixml)

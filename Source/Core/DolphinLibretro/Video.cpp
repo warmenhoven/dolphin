@@ -15,7 +15,7 @@
 #include "VideoBackends/D3D/D3DState.h"
 #include "VideoBackends/D3D/VideoBackend.h"
 #endif
-#if !defined(__APPLE__) && defined(HAVE_VULKAN)
+#if !defined(__APPLE__) && defined(HAS_VULKAN)
 #include <libretro_vulkan.h>
 #endif
 
@@ -39,7 +39,7 @@
 #include "VideoCommon/VideoBackendBase.h"
 #include "VideoCommon/VideoCommon.h"
 #include "VideoCommon/VideoConfig.h"
-#if !defined(__APPLE__) && defined(HAVE_VULKAN)
+#if !defined(__APPLE__) && defined(HAS_VULKAN)
 #include "VideoBackends/Vulkan/VideoBackend.h"
 #include "VideoBackends/Vulkan/VulkanContext.h"
 #endif
@@ -99,7 +99,7 @@ static void ContextReset(void)
 {
   DEBUG_LOG(VIDEO, "Context reset!\n");
 
-#if !defined(__APPLE__) && defined(HAVE_VULKAN)
+#if !defined(__APPLE__) && defined(HAS_VULKAN)
   if (hw_render.context_type == RETRO_HW_CONTEXT_VULKAN)
   {
     retro_hw_render_interface* vulkan;
@@ -211,7 +211,7 @@ static void ContextDestroy(void)
 #endif
     break;
   case RETRO_HW_CONTEXT_VULKAN:
-#if !defined(__APPLE__) && defined(HAVE_VULKAN)
+#if !defined(__APPLE__) && defined(HAS_VULKAN)
     Vk::SetHWRenderInterface(nullptr);
 #endif
     break;
@@ -224,7 +224,7 @@ static void ContextDestroy(void)
     break;
   }
 }
-#if !defined(__APPLE__) && defined(HAVE_VULKAN)
+#if !defined(__APPLE__) && defined(HAS_VULKAN)
 namespace Vk
 {
 static const VkApplicationInfo* GetApplicationInfo(void)
@@ -337,7 +337,7 @@ static bool SetHWRender(retro_hw_context_type type)
     }
     break;
 #endif
-#if !defined(__APPLE__) && defined(HAVE_VULKAN)
+#if !defined(__APPLE__) && defined(HAS_VULKAN)
   case RETRO_HW_CONTEXT_VULKAN:
     hw_render.version_major = VK_API_VERSION_1_0;
     hw_render.version_minor = 0;
@@ -379,7 +379,7 @@ void Init()
     if (SetHWRender(RETRO_HW_CONTEXT_DIRECT3D))
       return;
 #endif
-#if !defined(__APPLE__) && defined(HAVE_VULKAN)
+#if !defined(__APPLE__) && defined(HAS_VULKAN)
     if (SetHWRender(RETRO_HW_CONTEXT_VULKAN))
       return;
 #endif
