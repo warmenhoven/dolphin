@@ -8,7 +8,7 @@ if(WIN32)
   add_subdirectory(D3D12)
 endif()
 
-if(APPLE)
+if(APPLE AND NOT LIBRETRO)
   add_subdirectory(Metal)
 endif()
 

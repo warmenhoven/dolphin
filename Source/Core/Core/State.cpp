@@ -20,7 +20,6 @@
 #include <lz4.h>
 #include <lzo/lzo1x.h>
 
-#include "Common/ChunkFile.h"
 #include "Common/CommonTypes.h"
 #include "Common/Contains.h"
 #include "Common/Event.h"
@@ -135,7 +134,10 @@ void EnableCompression(bool compression)
   s_use_compression = compression;
 }
 
-static void DoState(Core::System& system, PointerWrap& p)
+#ifndef __LIBRETRO__
+static
+#endif
+void DoState(Core::System& system, PointerWrap& p)
 {
   bool is_wii = system.IsWii() || system.IsMIOS();
   const bool is_wii_currently = is_wii;

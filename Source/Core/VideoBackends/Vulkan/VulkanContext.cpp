@@ -589,7 +589,7 @@ std::unique_ptr<VulkanContext> VulkanContext::Create(VkInstance instance, VkPhys
                                                      bool enable_validation_layer,
                                                      u32 vk_api_version)
 {
-  std::unique_ptr<VulkanContext> context = std::make_unique<VulkanContext>(instance, gpu, surface);
+  std::unique_ptr<VulkanContext> context = std::make_unique<VulkanContext>(instance, gpu);
 
   // Initialize DriverDetails so that we can check for bugs to disable features if needed.
   context->InitDriverDetails();
@@ -607,6 +607,7 @@ std::unique_ptr<VulkanContext> VulkanContext::Create(VkInstance instance, VkPhys
       vkDestroySurfaceKHR(instance, surface, nullptr);
 
     return nullptr;
+  }
 
   return context;
 }
@@ -687,7 +688,7 @@ void VulkanContext::WarnMissingDeviceFeatures()
   }
 }
 
-bool VulkanContext::CreateDevice(bool enable_validation_layer)
+bool VulkanContext::CreateDevice(VkSurfaceKHR surface, bool enable_validation_layer)
 {
   u32 queue_family_count;
   vkGetPhysicalDeviceQueueFamilyProperties(m_physical_device, &queue_family_count, nullptr);
@@ -712,17 +713,17 @@ bool VulkanContext::CreateDevice(bool enable_validation_layer)
     {
       m_graphics_queue_family_index = i;
       // Quit now, no need for a present queue.
-      if (!m_surface)
+      if (!surface)
       {
         break;
       }
     }
 
-    if (m_surface)
+    if (surface)
     {
       VkBool32 present_supported;
       VkResult res =
-          vkGetPhysicalDeviceSurfaceSupportKHR(m_physical_device, i, m_surface, &present_supported);
+          vkGetPhysicalDeviceSurfaceSupportKHR(m_physical_device, i, surface, &present_supported);
       if (res != VK_SUCCESS)
       {
         LOG_VULKAN_ERROR(res, "vkGetPhysicalDeviceSurfaceSupportKHR failed: ");
@@ -746,7 +747,7 @@ bool VulkanContext::CreateDevice(bool enable_validation_layer)
     ERROR_LOG_FMT(VIDEO, "Vulkan: Failed to find an acceptable graphics queue.");
     return false;
   }
-  if (m_surface && m_present_queue_family_index == queue_family_count)
+  if (surface && m_present_queue_family_index == queue_family_count)
   {
     ERROR_LOG_FMT(VIDEO, "Vulkan: Failed to find an acceptable present queue.");
     return false;
@@ -787,7 +788,7 @@ bool VulkanContext::CreateDevice(bool enable_validation_layer)
   }
   device_info.pQueueCreateInfos = queue_infos.data();
 
-  if (!SelectDeviceExtensions(m_surface != VK_NULL_HANDLE))
+  if (!SelectDeviceExtensions(surface != VK_NULL_HANDLE))
     return false;
 
   // convert std::string list to a char pointer list which we can feed in
@@ -825,7 +826,7 @@ bool VulkanContext::CreateDevice(bool enable_validation_layer)
 
   // Grab the graphics and present queues.
   vkGetDeviceQueue(m_device, m_graphics_queue_family_index, 0, &m_graphics_queue);
-  if (m_surface)
+  if (surface)
   {
     vkGetDeviceQueue(m_device, m_present_queue_family_index, 0, &m_present_queue);
   }
@@ -842,11 +843,82 @@ bool VulkanContext::CreateAllocator(u32 vk_api_version)
   allocator_info.pAllocationCallbacks = nullptr;
   allocator_info.pDeviceMemoryCallbacks = nullptr;
   allocator_info.pHeapSizeLimit = nullptr;
-  allocator_info.pVulkanFunctions = nullptr;
   allocator_info.instance = m_instance;
   allocator_info.vulkanApiVersion = vk_api_version;
   allocator_info.pTypeExternalMemoryHandleTypes = nullptr;
+#ifdef __LIBRETRO__
+  PFN_vkGetInstanceProcAddr gip = vkGetInstanceProcAddr;
+  PFN_vkGetDeviceProcAddr gdp = vkGetDeviceProcAddr;
 
+  if (!gip) {
+    ERROR_LOG_FMT(VIDEO, "vkGetInstanceProcAddr is null");
+    return false;
+  }
+  if (!gdp) {
+    gdp = reinterpret_cast<PFN_vkGetDeviceProcAddr>(gip(m_instance, "vkGetDeviceProcAddr"));
+    if (!gdp) {
+      ERROR_LOG_FMT(VIDEO, "vkGetDeviceProcAddr is null");
+      return false;
+    }
+  }
+
+  VmaVulkanFunctions funcs = {};
+  funcs.vkGetInstanceProcAddr = gip;
+  funcs.vkGetDeviceProcAddr = gdp;
+
+  funcs.vkGetPhysicalDeviceMemoryProperties2KHR =
+      reinterpret_cast<PFN_vkGetPhysicalDeviceMemoryProperties2KHR>(
+          gip(m_instance, "vkGetPhysicalDeviceMemoryProperties2KHR"));
+  if (!funcs.vkGetPhysicalDeviceMemoryProperties2KHR) {
+    funcs.vkGetPhysicalDeviceMemoryProperties2KHR =
+        reinterpret_cast<PFN_vkGetPhysicalDeviceMemoryProperties2KHR>(
+            gip(m_instance, "vkGetPhysicalDeviceMemoryProperties2"));
+  }
+  if (!funcs.vkGetPhysicalDeviceMemoryProperties2KHR) {
+    ERROR_LOG_FMT(VIDEO, "Failed to load vkGetPhysicalDeviceMemoryProperties2(KHR)");
+    return false;
+  }
+
+  funcs.vkGetBufferMemoryRequirements2KHR =
+      reinterpret_cast<PFN_vkGetBufferMemoryRequirements2KHR>(
+          gdp(m_device, "vkGetBufferMemoryRequirements2KHR"));
+  if (!funcs.vkGetBufferMemoryRequirements2KHR) {
+    funcs.vkGetBufferMemoryRequirements2KHR =
+        reinterpret_cast<PFN_vkGetBufferMemoryRequirements2KHR>(
+            gdp(m_device, "vkGetBufferMemoryRequirements2"));
+  }
+
+  funcs.vkGetImageMemoryRequirements2KHR =
+      reinterpret_cast<PFN_vkGetImageMemoryRequirements2KHR>(
+          gdp(m_device, "vkGetImageMemoryRequirements2KHR"));
+  if (!funcs.vkGetImageMemoryRequirements2KHR) {
+    funcs.vkGetImageMemoryRequirements2KHR =
+        reinterpret_cast<PFN_vkGetImageMemoryRequirements2KHR>(
+            gdp(m_device, "vkGetImageMemoryRequirements2"));
+  }
+
+  funcs.vkBindBufferMemory2KHR =
+      reinterpret_cast<PFN_vkBindBufferMemory2KHR>(
+          gdp(m_device, "vkBindBufferMemory2KHR"));
+  if (!funcs.vkBindBufferMemory2KHR) {
+    funcs.vkBindBufferMemory2KHR =
+        reinterpret_cast<PFN_vkBindBufferMemory2KHR>(
+            gdp(m_device, "vkBindBufferMemory2"));
+  }
+
+  funcs.vkBindImageMemory2KHR =
+      reinterpret_cast<PFN_vkBindImageMemory2KHR>(
+          gdp(m_device, "vkBindImageMemory2KHR"));
+  if (!funcs.vkBindImageMemory2KHR) {
+    funcs.vkBindImageMemory2KHR =
+        reinterpret_cast<PFN_vkBindImageMemory2KHR>(
+            gdp(m_device, "vkBindImageMemory2"));
+  }
+
+  allocator_info.pVulkanFunctions = &funcs;
+#else
+  allocator_info.pVulkanFunctions = nullptr;
+#endif
   if (SupportsDeviceExtension(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME))
     allocator_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
 
@@ -1037,6 +1109,12 @@ void VulkanContext::InitDriverDetails()
     // Currently only the binary driver exists for PowerVR.
     vendor = DriverDetails::VENDOR_IMGTEC;
     driver = DriverDetails::DRIVER_IMGTEC;
+  }
+  else if (vendor_id == 0x14E4 || device_name.find("V3D 4.2") != std::string::npos)
+  {
+    // Supported by the videocore IV found in the RPI4 and upwards.
+    vendor = DriverDetails::VENDOR_MESA;
+    driver = DriverDetails::DRIVER_V3D;
   }
   else if (device_name.find("Apple") != std::string::npos)
   {

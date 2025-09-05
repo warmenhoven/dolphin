@@ -27,6 +27,9 @@ class PCAP;
 
 namespace Core
 {
+#ifdef None
+#undef None
+#endif
 enum class NetworkCaptureType
 {
   None,

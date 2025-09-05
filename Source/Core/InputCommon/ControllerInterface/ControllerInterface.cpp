@@ -58,7 +58,7 @@ void ControllerInterface::Initialize(const WindowSystemInfo& wsi)
 
   m_populating_devices_counter = 1;
 
-#ifdef CIFACE_USE_WIN32
+#if defined(CIFACE_USE_WIN32) && !defined(__LIBRETRO__)
   m_input_backends.emplace_back(ciface::Win32::CreateInputBackend(this));
 #endif
 #ifdef CIFACE_USE_XLIB
@@ -70,7 +70,7 @@ void ControllerInterface::Initialize(const WindowSystemInfo& wsi)
 #ifdef CIFACE_USE_SDL
   m_input_backends.emplace_back(ciface::SDL::CreateInputBackend(this));
 #endif
-#ifdef CIFACE_USE_ANDROID
+#if defined(CIFACE_USE_ANDROID) && !defined(__LIBRETRO__)
   m_input_backends.emplace_back(ciface::Android::CreateInputBackend(this));
 #endif
 #ifdef CIFACE_USE_EVDEV

@@ -322,7 +322,7 @@ if(WIN32)
       CompatPatches.cpp
     )
   endif()
-elseif(APPLE)
+elseif(APPLE AND NOT LIBRETRO)
   target_sources(common PRIVATE
     GL/GLInterface/AGL.h
     GL/GLInterface/AGL.mm
@@ -408,4 +408,9 @@ endif()
 if(MSVC)
   # Add precompiled header
   target_link_libraries(common PRIVATE use_pch)
+endif()
+
+if(LIBRETRO)
+  target_include_directories(common PRIVATE ${CMAKE_SOURCE_DIR}/Externals/Libretro/Include)
+  target_link_libraries(common PRIVATE dolphin_libretro_videocontexts)
 endif()

@@ -45,7 +45,7 @@ static Common::DynamicLibrary s_vulkan_module;
 
 static bool OpenVulkanLibrary(bool force_system_library)
 {
-#if defined(__APPLE__)
+#if defined(__APPLE__) && !defined(__LIBRETRO__)
   // Check if a path to a specific Vulkan library has been specified.
   char* libvulkan_env = getenv("LIBVULKAN_PATH");
   if (libvulkan_env && s_vulkan_module.Open(libvulkan_env))

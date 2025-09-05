@@ -22,6 +22,10 @@ public:
 
   static constexpr const char* NAME = "D3D";
 
+#ifdef __LIBRETRO__
+  void FillD3DBackendInfo() { FillBackendInfo(); }
+#endif
+private:
   void FillBackendInfo();
 };
 }  // namespace DX11

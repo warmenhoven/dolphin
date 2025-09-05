@@ -259,6 +259,7 @@ static const char* to_string(Driver driver)
     case DRIVER_QUALCOMM:    return "Qualcomm";
     case DRIVER_FREEDRENO:   return "Freedreno";
     case DRIVER_IMGTEC:      return "Imgtech";
+    case DRIVER_V3D:         return "Broadcom";
     case DRIVER_VIVANTE:     return "Vivante";
     case DRIVER_PORTABILITY: return "Portability";
     case DRIVER_APPLE:       return "Apple";

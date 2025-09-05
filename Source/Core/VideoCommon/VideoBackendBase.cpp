@@ -36,7 +36,7 @@
 #ifdef HAS_VULKAN
 #include "VideoBackends/Vulkan/VideoBackend.h"
 #endif
-#ifdef __APPLE__
+#if defined(__APPLE__) && !defined(__LIBRETRO__)
 #include "VideoBackends/Metal/VideoBackend.h"
 #endif
 
@@ -199,7 +199,7 @@ const std::vector<std::unique_ptr<VideoBackendBase>>& VideoBackendBase::GetAvail
     backends.push_back(std::make_unique<Vulkan::VideoBackend>());
 #endif
 #endif
-#ifdef __APPLE__
+#if defined(__APPLE__) && !defined(__LIBRETRO__)
     backends.emplace(backends.begin(), std::make_unique<Metal::VideoBackend>());
 #endif
 #ifdef HAS_OPENGL

@@ -5,7 +5,7 @@
 
 #include "Common/GL/GLContext.h"
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) && !defined(__LIBRETRO__)
 #include "Common/GL/GLInterface/AGL.h"
 #endif
 #if defined(_WIN32)
@@ -27,7 +27,7 @@
 #endif
 #endif
 #if defined(__LIBRETRO__)
-#include "DolphinLibretro/Video.h"
+#include "DolphinLibretro/VideoContexts/GLContextLR.h"
 #endif
 
 const std::array<std::pair<int, int>, 9> GLContext::s_desktop_opengl_versions = {
@@ -85,7 +85,7 @@ std::unique_ptr<GLContext> GLContext::Create(const WindowSystemInfo& wsi, bool s
                                              bool prefer_egl, bool prefer_gles)
 {
   std::unique_ptr<GLContext> context;
-#if defined(__APPLE__)
+#if defined(__APPLE__) && !defined(__LIBRETRO__)
   if (wsi.type == WindowSystemType::MacOS || wsi.type == WindowSystemType::Headless)
     context = std::make_unique<GLContextAGL>();
 #endif
@@ -122,7 +122,7 @@ std::unique_ptr<GLContext> GLContext::Create(const WindowSystemInfo& wsi, bool s
 #endif
 #if defined(__LIBRETRO__)
   if (wsi.type == WindowSystemType::Libretro)
-    context = std::make_unique<Libretro::Video::RGLContext>();
+    context = std::make_unique<GLContextLR>();
 #endif
   if (!context)
     return nullptr;

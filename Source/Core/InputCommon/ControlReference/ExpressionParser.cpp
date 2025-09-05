@@ -655,7 +655,8 @@ public:
   void UpdateReferences(ControlEnvironment& env) override
   {
     m_lhs->UpdateReferences(env);
-    m_rhs->UpdateReferences(env);
+    if (m_rhs)
+      m_rhs->UpdateReferences(env);
   }
 
 private:

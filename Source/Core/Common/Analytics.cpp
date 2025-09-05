@@ -137,15 +137,20 @@ void AnalyticsReportBuilder::AppendSerializedValueVector(std::string* report,
 
 AnalyticsReporter::AnalyticsReporter()
 {
+#if defined(USE_ANALYTICS) && USE_ANALYTICS
   m_reporter_thread = std::thread(&AnalyticsReporter::ThreadProc, this);
+#endif
 }
 
 AnalyticsReporter::~AnalyticsReporter()
 {
+#if defined(USE_ANALYTICS) && USE_ANALYTIC
   // Set the exit request flag and wait for the thread to honor it.
   m_reporter_stop_request.Set();
   m_reporter_event.Set();
-  m_reporter_thread.join();
+  if (m_reporter_thread.joinable())
+    m_reporter_thread.join();
+#endif
 }
 
 void AnalyticsReporter::Send(AnalyticsReportBuilder&& report)

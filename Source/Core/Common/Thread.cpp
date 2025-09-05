@@ -46,7 +46,7 @@ int CurrentThreadId()
 #endif
 }
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 
 void SetThreadAffinity(std::thread::native_handle_type thread, u32 mask)
 {
@@ -119,7 +119,7 @@ void SetCurrentThreadName(const char* name)
   SetCurrentThreadNameViaApi(name);
 }
 
-#else  // !_MSC_VER, so must be POSIX threads
+#else  // !_WIN32, so must be POSIX threads
 
 void SetThreadAffinity(std::thread::native_handle_type thread, u32 mask)
 {

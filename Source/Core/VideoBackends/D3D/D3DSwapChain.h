@@ -12,6 +12,9 @@
 #include "VideoBackends/D3D/D3DBase.h"
 #include "VideoBackends/D3DCommon/SwapChain.h"
 #include "VideoCommon/TextureConfig.h"
+#ifdef __LIBRETRO__
+#include "VideoBackends/D3D/DXTexture.h"
+#endif
 
 namespace DX11
 {
@@ -29,6 +32,16 @@ public:
   DXTexture* GetTexture() const { return m_texture.get(); }
   DXFramebuffer* GetFramebuffer() const { return m_framebuffer.get(); }
 
+#ifdef __LIBRETRO__
+  void SetTexture(std::unique_ptr<DXTexture> texture)
+  {
+    m_texture = std::move(texture);
+  }
+  void SetFramebuffer(std::unique_ptr<DXFramebuffer> buffer)
+  {
+    m_framebuffer = std::move(buffer);
+  }
+#endif
 protected:
   bool CreateSwapChainBuffers() override;
   void DestroySwapChainBuffers() override;

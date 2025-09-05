@@ -87,7 +87,7 @@ PRIVATE
   spng::spng
 )
 
-if(WIN32)
+if(WIN32 AND NOT LIBRETRO) 
   target_sources(inputcommon PRIVATE
     ControllerInterface/DInput/DInput.cpp
     ControllerInterface/DInput/DInput.h
@@ -114,7 +114,7 @@ if(WIN32)
       dinput8
     )
   endif()
-elseif(APPLE)
+elseif(APPLE AND NOT LIBRETRO)
   target_sources(inputcommon PRIVATE
     ControllerInterface/Quartz/Quartz.h
     ControllerInterface/Quartz/Quartz.mm
@@ -150,7 +150,7 @@ elseif(ANDROID)
   )
 endif()
 
-if(NOT ANDROID)
+if(NOT ANDROID AND NOT IOS AND LIBUSB_FOUND)
   target_link_libraries(inputcommon PUBLIC LibUSB::LibUSB)
 endif()
 

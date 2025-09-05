@@ -57,7 +57,7 @@
 #include "UICommon/DBusUtils.h"
 #endif
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && !defined(__LIBRETRO__)
 #include <IOKit/pwr_mgt/IOPMLib.h>
 #endif
 
@@ -183,12 +183,14 @@ void InitControllers(const WindowSystemInfo& wsi)
 
 void ShutdownControllers()
 {
+#ifndef __LIBRETRO__
   Pad::Shutdown();
   Pad::ShutdownGBA();
   Keyboard::Shutdown();
   Wiimote::Shutdown();
   HotkeyManagerEmu::Shutdown();
   FreeLook::Shutdown();
+#endif
 
   g_controller_interface.Shutdown();
 }
@@ -500,7 +502,7 @@ void InhibitScreenSaver(bool inhibit)
                           (inhibit ? (ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED) : 0));
 #endif
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && !defined(__LIBRETRO__)
   static IOPMAssertionID s_power_assertion = kIOPMNullAssertionID;
   if (inhibit)
   {

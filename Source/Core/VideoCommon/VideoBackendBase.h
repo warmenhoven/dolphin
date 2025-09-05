@@ -64,13 +64,12 @@ public:
   // Wrapper function which pushes the event to the GPU thread.
   void DoState(PointerWrap& p);
 
-protected:
   // For hardware backends
   bool InitializeShared(std::unique_ptr<AbstractGfx> gfx,
                         std::unique_ptr<VertexManagerBase> vertex_manager,
                         std::unique_ptr<PerfQueryBase> perf_query,
                         std::unique_ptr<BoundingBox> bounding_box);
-
+protected:
   // For software and null backends. Allows overriding the default EFBInterface and TextureCache
   bool InitializeShared(std::unique_ptr<AbstractGfx> gfx,
                         std::unique_ptr<VertexManagerBase> vertex_manager,

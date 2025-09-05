@@ -137,6 +137,13 @@ void FifoManager::ExitGpuLoop()
   m_gpu_mainloop.Stop(Common::BlockingLoop::StopMode::NonBlock);
 }
 
+#ifdef __LIBRETRO__
+void FifoManager::StopGpuLoop()
+{
+  m_gpu_mainloop.Stop(Common::BlockingLoop::StopMode::NonBlock);
+}
+#endif
+
 void FifoManager::EmulatorState(bool running)
 {
   m_emu_running_state.Set(running);
@@ -287,11 +294,8 @@ void FifoManager::ResetVideoBuffer()
 // Purpose: Keep the Core HW updated about the CPU-GPU distance
 void FifoManager::RunGpuLoop()
 {
-  if (SConfig::GetInstance().bEMUThread)
-  {
-    AsyncRequests::GetInstance()->SetEnable(true);
-    AsyncRequests::GetInstance()->SetPassthrough(false);
-  }
+  AsyncRequests::GetInstance()->SetEnable(true);
+  AsyncRequests::GetInstance()->SetPassthrough(false);
 
   m_gpu_mainloop.Run(
       [this] {
@@ -395,11 +399,8 @@ void FifoManager::RunGpuLoop()
       },
       100);
 
-  if (SConfig::GetInstance().bEMUThread)
-  {
-    AsyncRequests::GetInstance()->SetEnable(false);
-    AsyncRequests::GetInstance()->SetPassthrough(true);
-  }
+  AsyncRequests::GetInstance()->SetEnable(false);
+  AsyncRequests::GetInstance()->SetPassthrough(true);
 }
 
 void FifoManager::FlushGpu()

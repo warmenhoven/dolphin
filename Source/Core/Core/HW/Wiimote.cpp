@@ -28,7 +28,7 @@
 // Limit the amount of wiimote connect requests, when a button is pressed in disconnected state
 static std::array<u8, MAX_BBMOTES> s_last_connect_request_counter;
 
-namespace
+namespace WiimoteCommon
 {
 static std::array<std::atomic<WiimoteSource>, MAX_BBMOTES> s_wiimote_sources;
 static std::optional<Config::ConfigChangedCallbackID> s_config_callback_id = std::nullopt;
@@ -168,10 +168,10 @@ void Shutdown()
 
   WiimoteReal::Stop();
 
-  if (s_config_callback_id)
+  if (WiimoteCommon::s_config_callback_id)
   {
-    Config::RemoveConfigChangedCallback(*s_config_callback_id);
-    s_config_callback_id = std::nullopt;
+    Config::RemoveConfigChangedCallback(*WiimoteCommon::s_config_callback_id);
+    WiimoteCommon::s_config_callback_id = std::nullopt;
   }
 }
 
@@ -187,9 +187,9 @@ void Initialize(InitializeMode init_mode)
 
   LoadConfig();
 
-  if (!s_config_callback_id)
-    s_config_callback_id = Config::AddConfigChangedCallback(RefreshConfig);
-  RefreshConfig();
+  if (!WiimoteCommon::s_config_callback_id)
+    WiimoteCommon::s_config_callback_id = Config::AddConfigChangedCallback(WiimoteCommon::RefreshConfig);
+  WiimoteCommon::RefreshConfig();
 
   WiimoteReal::Initialize(init_mode);
 
@@ -230,7 +230,7 @@ void DoState(PointerWrap& p)
 {
   for (int i = 0; i < MAX_BBMOTES; ++i)
   {
-    const WiimoteSource source = GetSource(i);
+    const WiimoteSource source = WiimoteCommon::GetSource(i);
     auto state_wiimote_source = u8(source);
     p.Do(state_wiimote_source);
 

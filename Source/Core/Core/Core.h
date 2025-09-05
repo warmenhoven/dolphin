@@ -144,8 +144,6 @@ bool IsHostThread();
 
 bool WantsDeterminism();
 
-void EmuThread(WindowSystemInfo wsi);
-
 // [NOT THREADSAFE] For use by Host only
 void SetState(Core::System& system, State state, bool report_state_change = true,
               bool override_achievement_restrictions = false);
@@ -196,5 +194,11 @@ void DoFrameStep(Core::System& system);
 void UpdateInputGate(bool require_focus, bool require_full_focus = false);
 
 void UpdateTitle(Core::System& system);
+
+#ifdef __LIBRETRO__
+  void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot,
+                 WindowSystemInfo wsi);
+  extern std::unique_ptr<BootParameters> g_boot_params;
+#endif
 
 }  // namespace Core

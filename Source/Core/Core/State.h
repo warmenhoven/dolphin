@@ -12,6 +12,9 @@
 
 #include "Common/Buffer.h"
 #include "Common/CommonTypes.h"
+#ifdef __LIBRETRO__
+#include "Common/ChunkFile.h"
+#endif
 
 namespace Core
 {
@@ -117,4 +120,8 @@ void UndoLoadState(Core::System& system);
 // for calling back into UI code without introducing a dependency on it in core
 using AfterLoadCallbackFunc = std::function<void()>;
 void SetOnAfterLoadCallback(AfterLoadCallbackFunc callback);
+
+#ifdef __LIBRETRO__
+void DoState(Core::System& system, PointerWrap& p);
+#endif
 }  // namespace State

@@ -781,9 +781,9 @@ static std::string CreateSysDirectoryPath()
 #endif
 #endif
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) && !defined(__LIBRETRO__)
   const std::string sys_directory = GetBundleDirectory() + DIR_SEP SYSDATA_DIR DIR_SEP;
-#elif defined(_WIN32) || defined(LINUX_LOCAL_DEV)
+#elif !defined(__LIBRETRO__) && (defined(_WIN32) || defined(LINUX_LOCAL_DEV))
   const std::string sys_directory = GetExeDirectory() + DIR_SEP SYSDATA_DIR DIR_SEP;
 #elif defined ANDROID
   const std::string sys_directory = s_android_sys_directory + DIR_SEP;

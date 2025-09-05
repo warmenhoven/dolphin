@@ -57,6 +57,9 @@
 #include "VideoCommon/VertexManagerBase.h"
 #include "VideoCommon/VideoCommon.h"
 #include "VideoCommon/VideoConfig.h"
+#ifdef __LIBRETRO__
+#include "VideoCommon/VideoBackendBase.h"
+#endif
 
 static const u64 TEXHASH_INVALID = 0;
 // Sonic the Fighters (inside Sonic Gems Collection) loops a 64 frames animation
@@ -556,7 +559,16 @@ void TextureCacheBase::DoState(PointerWrap& p)
   if (p.IsWriteMode() || p.IsMeasureMode())
     DoSaveState(p);
   else
+  {
     DoLoadState(p);
+#ifdef __LIBRETRO__
+    if (p.IsReadMode() &&
+        g_video_backend && g_video_backend->GetName() == "OGL")
+    {
+      Invalidate();
+    }
+#endif
+  }
 }
 
 void TextureCacheBase::DoSaveState(PointerWrap& p)

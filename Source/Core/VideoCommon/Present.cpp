@@ -22,6 +22,9 @@
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/VideoEvents.h"
 #include "VideoCommon/Widescreen.h"
+#ifdef __LIBRETRO__
+#include "VideoCommon/VideoBackendBase.h"
+#endif
 
 std::unique_ptr<VideoCommon::Presenter> g_presenter;
 
@@ -926,7 +929,9 @@ void Presenter::DoState(PointerWrap& p)
   {
     // This technically counts as the end of the frame
     AfterFrameEvent::Trigger(Core::System::GetInstance());
-
+#ifdef __LIBRETRO__
+    if (g_video_backend && g_video_backend->GetName() != "OGL")
+#endif
     ImmediateSwap(m_last_xfb_addr, m_last_xfb_width, m_last_xfb_stride, m_last_xfb_height,
                   m_last_xfb_ticks);
   }

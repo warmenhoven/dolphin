@@ -61,6 +61,9 @@ void UpdateSource(unsigned int index);
 
 HIDWiimote* GetHIDWiimoteSource(unsigned int index);
 
+WiimoteSource GetSource(unsigned int index);
+void OnSourceChanged(unsigned int index, WiimoteSource source);
+void RefreshConfig();
 }  // namespace WiimoteCommon
 
 namespace Wiimote

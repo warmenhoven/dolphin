@@ -5,7 +5,7 @@
 
 #include "VideoCommon/AbstractGfx.h"
 #include "VideoCommon/Constants.h"
-#include "VideoBackends/OGL/OGLTexture.h"
+#include "OGLTexture.h"
 
 class GLContext;
 
@@ -93,8 +93,12 @@ public:
 
   SurfaceInfo GetSurfaceInfo() const override;
 
-  // Needed for libretro
-  void SetSystemFrameBuffer(GLuint fbo) { m_system_framebuffer->SetFBO(fbo); }
+#ifdef __LIBRETRO__
+  void SetSystemFrameBuffer(GLuint fbo)
+  {
+    m_system_framebuffer->SetFBO(fbo);
+  }
+#endif
 
 private:
   void CheckForSurfaceChange();

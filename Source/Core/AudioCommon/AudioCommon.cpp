@@ -209,9 +209,10 @@ void SendAIBuffer(Core::System& system, const short* samples, unsigned int num_s
   if (mixer && samples)
   {
     mixer->PushSamples(samples, num_samples);
+#ifdef __LIBRETRO__
+    const_cast<SoundStream*>(sound_stream)->Update(num_samples);
+#endif
   }
-  // Needed for libretro
-  sound_stream->Update();
 }
 
 void StartAudioDump(Core::System& system)

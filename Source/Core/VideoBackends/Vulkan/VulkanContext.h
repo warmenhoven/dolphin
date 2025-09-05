@@ -94,7 +94,6 @@ public:
   VkInstance GetVulkanInstance() const { return m_instance; }
   VkPhysicalDevice GetPhysicalDevice() const { return m_physical_device; }
   VkDevice GetDevice() const { return m_device; }
-  VkSurfaceKHR GetSurface() const { return m_surface; }
   VkQueue GetGraphicsQueue() const { return m_graphics_queue; }
   u32 GetGraphicsQueueFamilyIndex() const { return m_graphics_queue_family_index; }
   VkQueue GetPresentQueue() const { return m_present_queue; }
@@ -158,6 +157,9 @@ private:
   PhysicalDeviceInfo m_device_info;
 
   std::vector<std::string> m_device_extensions;
+#ifdef __LIBRETRO__
+  VmaVulkanFunctions m_vulkan_functions = {};
+#endif
 };
 
 extern std::unique_ptr<VulkanContext> g_vulkan_context;

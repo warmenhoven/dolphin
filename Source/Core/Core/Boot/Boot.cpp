@@ -211,7 +211,13 @@ std::unique_ptr<BootParameters> BootParameters::GenerateFromFile(std::vector<std
   std::string folder_path;
 #endif
   std::string extension;
-  SplitPath(paths.front(), &folder_path, nullptr, &extension);
+  SplitPath(paths.front(),
+#ifndef __LIBRETRO__
+            &folder_path,
+#else
+            nullptr,
+#endif
+            nullptr, &extension);
   Common::ToLower(&extension);
 
 #ifndef __LIBRETRO__

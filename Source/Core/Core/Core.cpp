@@ -100,6 +100,10 @@ static bool s_wants_determinism;
 static std::thread s_emu_thread;
 static std::vector<StateChangedCallbackFunc> s_on_state_changed_callbacks;
 
+#ifdef __LIBRETRO__
+static std::vector<Common::ScopeGuard> s_emu_thread_scope_guards;
+std::unique_ptr<BootParameters> g_boot_params;
+#endif
 static std::thread s_cpu_thread;
 static bool s_is_throttler_temp_disabled = false;
 static bool s_frame_step = false;
@@ -128,8 +132,11 @@ static thread_local bool tls_is_cpu_thread = false;
 static thread_local bool tls_is_gpu_thread = false;
 static thread_local bool tls_is_host_thread = false;
 
-static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot,
-                      WindowSystemInfo wsi);
+#ifndef __LIBRETRO__
+static
+#endif
+void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot,
+               WindowSystemInfo wsi);
 
 static Common::EventHook s_frame_presented =
     AfterPresentEvent::Register(&Core::Callback_FramePresented, "Core Frame Presented");
@@ -243,15 +250,24 @@ bool Init(Core::System& system, std::unique_ptr<BootParameters> boot, const Wind
   INFO_LOG_FMT(BOOT, "CPU Thread separate = {}", system.IsDualCoreMode() ? "Yes" : "No");
 
   // Manually reactivate the video backend in case a GameINI overrides the video backend setting.
+#ifndef __LIBRETRO__
   VideoBackendBase::PopulateBackendInfo(wsi);
 
   // Issue any API calls which must occur on the main thread for the graphics backend.
   WindowSystemInfo prepared_wsi(wsi);
   g_video_backend->PrepareWindow(prepared_wsi);
+#endif
 
   // Start the emu thread
   s_state.store(State::Starting);
-  s_emu_thread = std::thread(EmuThread, std::ref(system), std::move(boot), prepared_wsi);
+
+#ifdef __LIBRETRO__
+    // Do not launch EmuThread — Libretro handles it manually
+    g_boot_params = std::move(boot);
+#else
+    s_emu_thread = std::thread(EmuThread, std::ref(system), std::move(boot), prepared_wsi);
+#endif
+
   return true;
 }
 
@@ -345,7 +361,7 @@ static void CPUSetInitialExecutionState(bool force_paused = false)
 }
 
 // Create the CPU thread, which is a CPU + Video thread in Single Core mode.
-static void CpuThread(Core::System& system, const std::optional<std::string>& savestate_path,
+static void CpuThread(Core::System& system, const std::optional<std::string> savestate_path,
                       bool delete_savestate)
 {
   DeclareAsCPUThread();
@@ -426,7 +442,7 @@ static void CpuThread(Core::System& system, const std::optional<std::string>& sa
   }
 }
 
-static void FifoPlayerThread(Core::System& system, const std::optional<std::string>& savestate_path,
+static void FifoPlayerThread(Core::System& system, const std::optional<std::string> savestate_path,
                              bool delete_savestate)
 {
   DeclareAsCPUThread();
@@ -464,8 +480,11 @@ static void FifoPlayerThread(Core::System& system, const std::optional<std::stri
 // Initialize and create emulation thread
 // Call browser: Init():s_emu_thread().
 // See the BootManager.cpp file description for a complete call schedule.
-static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot,
-                      WindowSystemInfo wsi)
+#ifndef __LIBRETRO__
+static
+#endif
+void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot,
+               WindowSystemInfo wsi)
 {
   NotifyStateChanged(State::Starting);
   Common::ScopeGuard flag_guard{[] {
@@ -497,7 +516,7 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
   Keyboard::LoadConfig();
 
   BootSessionData boot_session_data = std::move(boot->boot_session_data);
-  const std::optional<std::string>& savestate_path = boot_session_data.GetSavestatePath();
+  const std::optional<std::string> savestate_path = boot_session_data.GetSavestatePath();
   const bool delete_savestate =
       boot_session_data.GetDeleteSavestate() == DeleteSavestateAfterBoot::Yes;
 
@@ -552,16 +571,19 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
     system.GetPowerPC().GetDebugInterface().Clear(guard);
   }};
 
+#ifndef __LIBRETRO__
   if (!g_video_backend->Initialize(wsi))
   {
     PanicAlertFmt("Failed to initialize video backend!");
     return;
   }
+#endif
   Common::ScopeGuard video_guard{[] {
     // Clear on screen messages that haven't expired
     OSD::ClearMessages();
 
-    g_video_backend->Shutdown();
+    if (g_video_backend)
+      g_video_backend->Shutdown();
   }};
 
   if (cpu_info.HTT)
@@ -585,7 +607,7 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
   system.GetPowerPC().SetMode(PowerPC::CoreMode::Interpreter);
 
   // Determine the CPU thread function
-  void (*cpuThreadFunc)(Core::System& system, const std::optional<std::string>& savestate_path,
+  void (*cpuThreadFunc)(Core::System& system, const std::optional<std::string> savestate_path,
                         bool delete_savestate);
   if (std::holds_alternative<BootParameters::DFF>(boot->parameters))
     cpuThreadFunc = FifoPlayerThread;
@@ -606,10 +628,13 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
   // Initialise Wii filesystem contents.
   // This is done here after Boot and not in BootManager to ensure that we operate
   // with the correct title context since save copying requires title directories to exist.
-  Common::ScopeGuard wiifs_guard{[&boot_session_data] {
-    Core::CleanUpWiiFileSystemContents(boot_session_data);
-    boot_session_data.InvokeWiiSyncCleanup();
-  }};
+  auto bsd_ptr = std::make_shared<BootSessionData>(std::move(boot_session_data));
+  Common::ScopeGuard wiifs_guard {
+    [bsd_ptr]() {
+      Core::CleanUpWiiFileSystemContents(*bsd_ptr);
+      bsd_ptr->InvokeWiiSyncCleanup();
+    }
+  };
   if (system.IsWii())
     Core::InitializeWiiFileSystemContents(savegame_redirect, boot_session_data);
   else
@@ -641,20 +666,23 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
 
     // Spawn the CPU thread. The CPU thread will signal the event that boot is complete.
     s_cpu_thread =
-        std::thread(cpuThreadFunc, std::ref(system), std::ref(savestate_path), delete_savestate);
+        std::thread(cpuThreadFunc, std::ref(system), std::move(savestate_path), delete_savestate);
 
-    if (!SConfig::GetInstance().bEMUThread)
+#ifdef __LIBRETRO__
+    bool exitBeforeGPULoop = true; // to satisfy MSVC unreachable error
+
+    if (exitBeforeGPULoop)
     {
       s_emu_thread_scope_guards.push_back(std::move(flag_guard));
       s_emu_thread_scope_guards.push_back(std::move(movie_guard));
       s_emu_thread_scope_guards.push_back(std::move(hw_guard));
       s_emu_thread_scope_guards.push_back(std::move(video_guard));
-      s_emu_thread_scope_guards.push_back(std::move(controller_guard));
       s_emu_thread_scope_guards.push_back(std::move(audio_guard));
       s_emu_thread_scope_guards.push_back(std::move(wiifs_guard));
+
       return;
     }
-
+#endif
     // become the GPU thread
     system.GetFifo().RunGpuLoop();
 
@@ -897,6 +925,9 @@ void Callback_NewField(Core::System& system)
   }
 
   AchievementManager::GetInstance().DoFrame();
+#ifdef __LIBRETRO__
+  system.GetFifo().StopGpuLoop();
+#endif
 }
 
 void UpdateTitle(Core::System& system)
@@ -925,23 +956,14 @@ void Shutdown(Core::System& system)
   // shut down.
   // For more info read "DirectX Graphics Infrastructure (DXGI): Best Practices"
   // on MSDN.
-  if (SConfig::GetInstance().bEMUThread)
-  {
-    if (s_emu_thread.joinable())
-      s_emu_thread.join();
-  }
-  else
-  {
-    if (SConfig::GetInstance().bCPUThread)
-      s_cpu_thread.join();
-    INFO_LOG(CONSOLE, "%s", StopMessage(true, "CPU thread stopped.").c_str());
-#ifdef USE_GDBSTUB
-    INFO_LOG(CONSOLE, "%s", StopMessage(true, "Stopping GDB ...").c_str());
-    gdb_deinit();
-    INFO_LOG(CONSOLE, "%s", StopMessage(true, "GDB stopped.").c_str());
+  if (s_emu_thread.joinable())
+    s_emu_thread.join();
+#ifdef __LIBRETRO__
+  if (s_cpu_thread.joinable())
+    s_cpu_thread.join();
+
+  s_emu_thread_scope_guards.clear();
 #endif
-    s_emu_thread_scope_guards.clear();
-  }
 
   // Make sure there's nothing left over in case we're about to exit.
   HostDispatchJobs(system);

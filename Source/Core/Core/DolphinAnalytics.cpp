@@ -47,10 +47,18 @@ constexpr char ANALYTICS_ENDPOINT[] = "https://analytics.dolphin-emu.org/report"
 }  // namespace
 
 #if defined(ANDROID)
-static std::function<std::string(std::string)> s_get_val_func;
+static std::function<std::string(std::string)> s_get_val_func =
+#ifdef __LIBRETRO__
+    [](const std::string&) { return std::string(); };
+#else
+    nullptr;
+#endif
+
 void DolphinAnalytics::AndroidSetGetValFunc(std::function<std::string(std::string)> func)
 {
+#ifndef __LIBRETRO__
   s_get_val_func = std::move(func);
+#endif
 }
 #endif
 

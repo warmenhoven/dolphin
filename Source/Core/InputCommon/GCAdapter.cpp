@@ -3,8 +3,11 @@
 
 #include "InputCommon/GCAdapter.h"
 
-#ifndef ANDROID
-#define GCADAPTER_USE_LIBUSB_IMPLEMENTATION true
+#ifdef ANDROID
+#define GCADAPTER_USE_LIBUSB_IMPLEMENTATION false
+#define GCADAPTER_USE_ANDROID_IMPLEMENTATION true
+#elif defined(__LIBRETRO__)
+#define GCADAPTER_USE_LIBUSB_IMPLEMENTATION false
 #define GCADAPTER_USE_ANDROID_IMPLEMENTATION false
 #else
 #define GCADAPTER_USE_LIBUSB_IMPLEMENTATION false
@@ -712,7 +715,6 @@ void Shutdown()
   env->CallStaticVoidMethod(s_adapter_class, disable_hotplug_callback_func);
 #endif
   Reset();
-  s_libusb_context.reset();
 
 #if GCADAPTER_USE_LIBUSB_IMPLEMENTATION
   s_libusb_context.reset();

@@ -13,6 +13,9 @@ enum class WindowSystemType
   Wayland,
   FBDev,
   Haiku,
+#ifdef __LIBRETRO__
+  Libretro,
+#endif
 };
 
 struct WindowSystemInfo
