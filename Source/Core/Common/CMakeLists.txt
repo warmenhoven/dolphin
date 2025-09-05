@@ -383,14 +383,14 @@ if(ENABLE_LLVM)
   endif()
 endif()
 
-if(UNIX)
+if(UNIX AND NOT LIBRETRO)
   # Posix networking code needs to be fixed for Windows
   add_executable(traversal_server TraversalServer.cpp)
   target_link_libraries(traversal_server PRIVATE common fmt::fmt)
   if(SYSTEMD_FOUND)
     target_link_libraries(traversal_server PRIVATE ${SYSTEMD_LIBRARIES})
   endif()
-elseif(WIN32)
+  elseif(WIN32 AND NOT LIBRETRO)
   find_package(PowerShell REQUIRED)
   execute_process(
     COMMAND ${POWERSHELL_EXE} -Command "[System.Diagnostics.FileVersionInfo]::GetVersionInfo('$ENV{VCToolsRedistDir}vc_redist.x64.exe').ProductVersion"

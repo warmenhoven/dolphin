@@ -190,7 +190,7 @@ else()
   endif()
 
   check_include_files(sndio.h USE_SNDIO)
-  if(USE_SNDIO)
+  if(USE_SNDIO AND NOT LIBRETRO)
     target_compile_definitions(cubeb PRIVATE DISABLE_LIBSNDIO_DLOPEN)
     target_link_libraries(cubeb PRIVATE sndio)
   endif()
