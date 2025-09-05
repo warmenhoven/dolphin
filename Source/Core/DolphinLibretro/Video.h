@@ -1,25 +1,29 @@
-
 #pragma once
 
 #include <libretro.h>
-#include "Common/GL/GLContext.h"
-#include "DolphinLibretro/Options.h"
+#include "DolphinLibretro/Common/Globals.h"
+#include "DolphinLibretro/Common/Options.h"
 #include "VideoBackends/Null/NullGfx.h"
 #include "VideoBackends/Software/SWOGLWindow.h"
 #include "VideoBackends/Software/SWGfx.h"
 #include "VideoBackends/Software/SWTexture.h"
 #include "VideoCommon/VideoBackendBase.h"
 #include "VideoCommon/VideoConfig.h"
-#ifndef __APPLE__
-#include "VideoBackends/Vulkan/VulkanLoader.h"
-#endif
+#include "Common/Logging/Log.h"
 #ifdef _WIN32
 #include "VideoBackends/D3D/D3DBase.h"
 #include "VideoBackends/D3D/D3DState.h"
 #include "VideoBackends/D3D/DXShader.h"
 #include "VideoBackends/D3D/DXTexture.h"
-#include "VideoBackends/D3D/Render.h"
-#include "VideoBackends/D3D/SwapChain.h"
+#include "VideoBackends/D3D/D3DSwapChain.h"
+#endif
+#ifdef HAS_VULKAN
+#ifndef __APPLE__
+#include "VideoBackends/Vulkan/VulkanLoader.h"
+#endif
+#include "VideoBackends/Vulkan/VulkanContext.h"
+#include "DolphinLibretro/Vulkan.h"
+#include <libretro_vulkan.h>
 #endif
 
 namespace Libretro
@@ -27,47 +31,10 @@ namespace Libretro
 namespace Video
 {
 void Init(void);
-extern retro_video_refresh_t video_cb;
-extern struct retro_hw_render_callback hw_render;
-
-/* retroGL interface*/
-class RGLContext : public GLContext
-{
-public:
-  RGLContext()
-  {
-    WindowSystemInfo wsi(WindowSystemType::Libretro, nullptr, nullptr, nullptr);
-    Initialize(wsi, g_Config.stereo_mode == StereoMode::QuadBuffer, true);
-  }
-  bool IsHeadless() const override { return false; }
-  void Swap() override
-  {
-    Libretro::Video::video_cb(RETRO_HW_FRAME_BUFFER_VALID, m_backbuffer_width, m_backbuffer_height,
-                              0);
-  }
-  void* GetFuncAddress(const std::string& name) override
-  {
-    return (void*)Libretro::Video::hw_render.get_proc_address(name.c_str());
-  }
-  virtual bool Initialize(const WindowSystemInfo& wsi, bool stereo, bool core) override
-  {
-    m_backbuffer_width = EFB_WIDTH * Libretro::Options::efbScale;
-    m_backbuffer_height = EFB_HEIGHT * Libretro::Options::efbScale;
-    switch (Libretro::Video::hw_render.context_type)
-    {
-    case RETRO_HW_CONTEXT_OPENGLES3:
-      m_opengl_mode = Mode::OpenGLES;
-      break;
-    default:
-    case RETRO_HW_CONTEXT_OPENGL_CORE:
-    case RETRO_HW_CONTEXT_OPENGL:
-      m_opengl_mode = Mode::OpenGL;
-      break;
-    }
-
-    return true;
-  }
-};
+bool Video_InitializeBackend();
+bool SetHWRender(retro_hw_context_type type);
+void ContextReset(void);
+void ContextDestroy(void);
 
 class SWGfx : public SW::SWGfx
 {
@@ -106,8 +73,9 @@ public:
 class DX11SwapChain : public DX11::SwapChain
 {
 public:
-  DX11SwapChain(const WindowSystemInfo& wsi, int width, int height)
-      : DX11::SwapChain(wsi, nullptr, nullptr)
+  DX11SwapChain(const WindowSystemInfo& wsi, int width, int height,
+                IDXGIFactory* dxgi_factory, ID3D11Device* d3d_device)
+      : DX11::SwapChain(wsi, dxgi_factory, d3d_device)
   {
     m_width = width;
     m_height = height;
@@ -117,12 +85,28 @@ public:
 
   bool Present() override
   {
-    ID3D11ShaderResourceView* srv = m_texture->GetD3DSRV();
+    auto* tex = GetTexture();
+    if (!tex)
+    {
+        ERROR_LOG_FMT(VIDEO, "Present aborted: no swap chain texture");
+        return false;
+    }
+
+    auto* srv = tex->GetD3DSRV();
+    if (!srv)
+    {
+        ERROR_LOG_FMT(VIDEO, "Present aborted: no SRV for swap chain texture");
+        return false;
+    }
 
     ID3D11RenderTargetView* nullView = nullptr;
     DX11::D3D::context->OMSetRenderTargets(1, &nullView, nullptr);
     DX11::D3D::context->PSSetShaderResources(0, 1, &srv);
-    Libretro::Video::video_cb(RETRO_HW_FRAME_BUFFER_VALID, m_width, m_height, m_width);
+
+    Libretro::Video::video_cb(RETRO_HW_FRAME_BUFFER_VALID,
+                              m_width, m_height,
+                              m_width);
+
     DX11::D3D::stateman->Restore();
     return true;
   }
@@ -130,15 +114,50 @@ public:
 protected:
   bool CreateSwapChainBuffers() override
   {
-    TextureConfig config(m_width, m_height, 1, 1, 1, AbstractTextureFormat::RGBA8,
-                         AbstractTextureFlag_RenderTarget);
+    TextureConfig config(m_width, m_height, 1, 1, 1,
+                         AbstractTextureFormat::RGBA8,
+                         AbstractTextureFlag_RenderTarget,
+                         AbstractTextureType::Texture_2D);
 
-    m_texture = DX11::DXTexture::Create(config);
-    m_framebuffer = DX11::DXFramebuffer::Create(m_texture.get(), nullptr);
+    auto tex = DX11::DXTexture::Create(config, "LibretroSwapChainTexture");
+    if (!tex)
+    {
+      ERROR_LOG_FMT(VIDEO, "Backbuffer texture creation failed");
+      return false;
+    }
+    SetTexture(std::move(tex));
+
+    auto fb = DX11::DXFramebuffer::Create(GetTexture(), nullptr, {});
+    if (!fb)
+    {
+      ERROR_LOG_FMT(VIDEO, "Backbuffer framebuffer creation failed");
+      return false;
+    }
+    SetFramebuffer(std::move(fb));
+
     return true;
   }
 };
 
 #endif
+
+namespace Vk
+{
+const VkApplicationInfo* GetApplicationInfo(void);
+
+#ifdef __APPLE__
+VkInstance CreateInstance(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
+                          const VkApplicationInfo* app,
+                          retro_vulkan_create_instance_wrapper_t create_instance_wrapper,
+                          void* opaque);
+#endif
+bool CreateDevice(retro_vulkan_context* context, VkInstance instance, VkPhysicalDevice gpu,
+                  VkSurfaceKHR surface, PFN_vkGetInstanceProcAddr get_instance_proc_addr,
+                  const char** required_device_extensions,
+                  unsigned num_required_device_extensions,
+                  const char** required_device_layers, unsigned num_required_device_layers,
+                  const VkPhysicalDeviceFeatures* required_features);
+} // namespace Vk
+
 }  // namespace Video
 }  // namespace Libretro

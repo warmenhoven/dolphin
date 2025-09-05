@@ -1,7 +1,7 @@
 
 #include <libretro.h>
 
-#include "DolphinLibretro/Options.h"
+#include "DolphinLibretro/Common/Options.h"
 
 namespace Libretro
 {
@@ -31,19 +31,70 @@ void Option<T>::Register()
   m_dirty = true;
 }
 
+template <typename T>
+Option<T>::Option(const char* id, const char* name,
+                  const std::vector<std::pair<std::string, T>>& list)
+  : m_id(id), m_name(name), m_list(list)
+{
+  Register();
+}
+
+template <>
+void Option<PowerPC::CPUCore>::FilterForJitCapability()
+{
+  bool can_jit = false;
+  if (Libretro::environ_cb &&
+      Libretro::environ_cb(RETRO_ENVIRONMENT_GET_JIT_CAPABLE, &can_jit) &&
+      !can_jit)
+  {
+    m_list.erase(
+      std::remove_if(m_list.begin(), m_list.end(),
+                     [](const auto& p) {
+#if defined(_M_X86_64)
+                       return p.second == PowerPC::CPUCore::JIT64;
+#elif defined(_M_ARM_64)
+                       return p.second == PowerPC::CPUCore::JITARM64;
+#else
+                       return false;
+#endif
+                     }),
+      m_list.end());
+
+    Libretro::Options::cpu_core.Rebuild();
+    Libretro::Options::SetVariables();
+  }
+}
+
+static std::vector<std::pair<std::string, PowerPC::CPUCore>> BuildCPUCoreList()
+{
+  std::vector<std::pair<std::string, PowerPC::CPUCore>> list;
+
+#if defined(_M_X86_64)
+  list.emplace_back("JIT64", PowerPC::CPUCore::JIT64);
+#endif
+#if defined(_M_ARM_64)
+  list.emplace_back("JITARM64", PowerPC::CPUCore::JITARM64);
+#endif
+
+  list.emplace_back("Interpreter", PowerPC::CPUCore::Interpreter);
+  list.emplace_back("Cached Interpreter", PowerPC::CPUCore::CachedInterpreter);
+
+  return list;
+}
+
 void SetVariables()
 {
   if (optionsList.empty())
     return;
   if (optionsList.back().key)
     optionsList.push_back({});
-  environ_cb(RETRO_ENVIRONMENT_SET_VARIABLES, (void*)optionsList.data());
+  ::Libretro::environ_cb(RETRO_ENVIRONMENT_SET_VARIABLES, (void*)optionsList.data());
 }
 
 void CheckVariables()
 {
   bool updated = false;
-  if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && !updated)
+  if (::Libretro::environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && !updated)
     return;
 
   for (bool* ptr : dirtyPtrList)
@@ -133,7 +184,13 @@ Option<bool> progressiveScan("dolphin_progressive_scan", "Progressive Scan", tru
 Option<bool> pal60("dolphin_pal60", "PAL60", true);
 Option<int> antiAliasing("dolphin_anti_aliasing", "Anti-Aliasing",
     {"None", "2x MSAA", "4x MSAA", "8x MSAA", "2x SSAA", "4x SSAA", "8x SSAA"});
-Option<int> maxAnisotropy("dolphin_max_anisotropy", "Max Anisotropy", {"1x", "2x", "4x", "8x", "16x"});
+Option<AnisotropicFilteringMode> maxAnisotropy("dolphin_max_anisotropy", "Max Anisotropy", {
+  {"1x", AnisotropicFilteringMode::Force1x},
+  {"2x", AnisotropicFilteringMode::Force2x},
+  {"4x", AnisotropicFilteringMode::Force4x},
+  {"8x", AnisotropicFilteringMode::Force8x},
+  {"16x", AnisotropicFilteringMode::Force16x}
+});
 Option<bool> skipDupeFrames("dolphin_skip_dupe_frames", "Skip Presenting Duplicate Frames", true);
 Option<bool> immediatexfb("dolphin_immediate_xfb", "Immediate XFB", false);
 Option<bool> efbScaledCopy("dolphin_efb_scaled_copy", "Scaled EFB Copy", true);
@@ -149,38 +206,29 @@ Option<bool> gpuTextureDecoding("dolphin_gpu_texture_decoding", "GPU Texture Dec
 Option<bool> fastDepthCalc("dolphin_fast_depth_calculation", "Fast Depth Calculation", true);
 Option<bool> bboxEnabled("dolphin_bbox_enabled", "Bounding Box Emulation", false);
 Option<bool> efbToVram("dolphin_efb_to_vram", "Disable EFB to VRAM", false);
+Option<bool> deferEfbCopies("dolphin_defer_efb_copies", "Defer EFB Copies to RAM", true);
 Option<bool> loadCustomTextures("dolphin_load_custom_textures", "Load Custom Textures", false);
 Option<bool> cacheCustomTextures("dolphin_cache_custom_textures", "Prefetch Custom Textures", false);
-Option<PowerPC::CPUCore> cpu_core("dolphin_cpu_core", "CPU Core",
-                                  {
-#ifdef _M_X86
-                                  {"JIT64", PowerPC::CPUCore::JIT64},
-#elif _M_ARM_64
-                                  {"JITARM64", PowerPC::CPUCore::JITARM64},
-#endif
-                                  {"Interpreter", PowerPC::CPUCore::Interpreter},
-                                  {"Cached Interpreter", PowerPC::CPUCore::CachedInterpreter}});
+Option<PowerPC::CPUCore> cpu_core("dolphin_cpu_core", "CPU Core", BuildCPUCoreList());
 Option<float> cpuClockRate("dolphin_cpu_clock_rate", "CPU Clock Rate",
-                           {{"100%", 1.0},
-                            {"150%", 1.5},
-                            {"200%", 2.0},
-                            {"250%", 2.5},
-                            {"300%", 3.0},
-                            {"350%", 3.5},
-                            {"400%", 4.0},
-                            {"5%", 0.05},
-                            {"10%", 0.1},
-                            {"20%", 0.2},
-                            {"30%", 0.3},
-                            {"40%", 0.4},
-                            {"50%", 0.5},
-                            {"60%", 0.6},
-                            {"70%", 0.7},
-                            {"80%", 0.8},
-                            {"90%", 0.9}});
+                           {{"100%", 1.0f},
+                            {"150%", 1.5f},
+                            {"200%", 2.0f},
+                            {"250%", 2.5f},
+                            {"300%", 3.0f},
+                            {"5%", 0.05f},
+                            {"10%", 0.1f},
+                            {"20%", 0.2f},
+                            {"30%", 0.3f},
+                            {"40%", 0.4f},
+                            {"50%", 0.5f},
+                            {"60%", 0.6f},
+                            {"70%", 0.7f},
+                            {"80%", 0.8f},
+                            {"90%", 0.9f}});
 Option<float> EmulationSpeed("dolphin_emulation_speed", "Emulation Speed",
-                           {{"unlimited", 0.0},
-                            {"100%", 1.0}});
+                           {{"unlimited", 0.0f},
+                            {"100%", 1.0f}});
 Option<bool> fastmem("dolphin_fastmem", "Fastmem", true);
 Option<bool> fastDiscSpeed("dolphin_fast_disc_speed", "Speed Up Disc Transfer Rate", false);
 Option<int> irMode("dolphin_ir_mode", "Wiimote IR Mode", 1,
@@ -243,13 +291,14 @@ Option<DiscIO::Language> Language("dolphin_language", "Language",
                                    {"Korean", DiscIO::Language::Korean}});
 Option<bool> cheatsEnabled("dolphin_cheats_enabled", "Internal Cheats Enabled", false);
 Option<bool> osdEnabled("dolphin_osd_enabled", "OSD Enabled", true);
-Option<Common::Log::LOG_LEVELS> logLevel("dolphin_log_level", "Log Level", {
-                                         {"Info", Common::Log::LINFO},
+Option<Common::Log::LogLevel> logLevel("dolphin_log_level", "Log Level", {
+                                         {"Info", Common::Log::LogLevel::LINFO},
 #if defined(_DEBUG) || defined(DEBUGFAST)
-                                         {"Debug", Common::Log::LDEBUG},
+                                         {"Debug", Common::Log::LogLevel::LDEBUG},
 #endif
-                                         {"Notice", Common::Log::LNOTICE},
-                                         {"Error", Common::Log::LERROR},
-                                         {"Warning", Common::Log::LWARNING}});
+                                         {"Notice", Common::Log::LogLevel::LNOTICE},
+                                         {"Error", Common::Log::LogLevel::LERROR},
+                                         {"Warning", Common::Log::LogLevel::LWARNING}});
+Option<bool> callBackAudio("dolphin_call_back_audio", "Use async audio", false);
 }  // namespace Options
 }  // namespace Libretro

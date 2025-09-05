@@ -15,6 +15,9 @@
 #include "VideoBackends/Vulkan/VulkanContext.h"
 #include "VideoCommon/FramebufferManager.h"
 
+#include <unordered_set>
+#include <string>
+
 #define LIBRETRO_VK_WARP_LIST()                                                                    \
   LIBRETRO_VK_WARP_FUNC(vkDestroyInstance);                                                        \
   LIBRETRO_VK_WARP_FUNC(vkCreateDevice);                                                           \
@@ -90,6 +93,8 @@ struct VkSwapchainKHR_T
 };
 static VkSwapchainKHR_T chain;
 
+VkSurfaceKHR GetSurface() { return initInfo.surface; }
+
 static VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo* pCreateInfo,
                                                        const VkAllocationCallbacks* pAllocator,
                                                        VkInstance* pInstance)
@@ -107,44 +112,104 @@ static void AddNameUnique(std::vector<const char*>& list, const char* value)
   list.push_back(value);
 }
 
+
 static VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice physicalDevice,
-                                                     const VkDeviceCreateInfo* pCreateInfo,
-                                                     const VkAllocationCallbacks* pAllocator,
-                                                     VkDevice* pDevice)
+  const VkDeviceCreateInfo* pCreateInfo,
+  const VkAllocationCallbacks* pAllocator,
+  VkDevice* pDevice)
 {
   VkDeviceCreateInfo info = *pCreateInfo;
-  std::vector<const char*> EnabledLayerNames(info.ppEnabledLayerNames,
-                                             info.ppEnabledLayerNames + info.enabledLayerCount);
-  std::vector<const char*> EnabledExtensionNames(
-      info.ppEnabledExtensionNames, info.ppEnabledExtensionNames + info.enabledExtensionCount);
-  VkPhysicalDeviceFeatures EnabledFeatures = *info.pEnabledFeatures;
 
+  // Copy requested layers/extensions/features from the incoming create-info
+  std::vector<const char*> enabled_layers(
+  info.ppEnabledLayerNames, info.ppEnabledLayerNames + info.enabledLayerCount);
+
+  std::vector<const char*> enabled_exts(
+  info.ppEnabledExtensionNames, info.ppEnabledExtensionNames + info.enabledExtensionCount);
+
+  VkPhysicalDeviceFeatures enabled_features{};
+  if (info.pEnabledFeatures)
+  enabled_features = *info.pEnabledFeatures;
+
+  // Merge in libretro-required layers/extensions/features
   for (unsigned i = 0; i < initInfo.num_required_device_layers; i++)
-    AddNameUnique(EnabledLayerNames, initInfo.required_device_layers[i]);
+  AddNameUnique(enabled_layers, initInfo.required_device_layers[i]);
 
   for (unsigned i = 0; i < initInfo.num_required_device_extensions; i++)
-    AddNameUnique(EnabledExtensionNames, initInfo.required_device_extensions[i]);
+  AddNameUnique(enabled_exts, initInfo.required_device_extensions[i]);
 
-  AddNameUnique(EnabledExtensionNames, VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME);
-  for (unsigned i = 0; i < sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32); i++)
+  AddNameUnique(enabled_exts, VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME);
+
+  // OR in required features bitwise (struct of VkBool32)
+  if (initInfo.required_features)
   {
-    if (((VkBool32*)initInfo.required_features)[i])
-      ((VkBool32*)&EnabledFeatures)[i] = VK_TRUE;
+    for (unsigned i = 0; i < sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32); i++)
+    {
+      if (reinterpret_cast<const VkBool32*>(initInfo.required_features)[i])
+        reinterpret_cast<VkBool32*>(&enabled_features)[i] = VK_TRUE;
+      }
+    }
+
+  // Build availability set for this exact physicalDevice
+  uint32_t ext_count = 0;
+  vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &ext_count, nullptr);
+  std::vector<VkExtensionProperties> props(ext_count);
+  if (ext_count)
+    vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &ext_count, props.data());
+
+  std::unordered_set<std::string> avail;
+  avail.reserve(props.size());
+  for (const auto& p : props)
+    avail.emplace(p.extensionName);
+
+  // Filter and de-dup the requested extensions against availability
+  std::vector<const char*> filtered_exts;
+  filtered_exts.reserve(enabled_exts.size());
+
+  std::unordered_set<std::string> seen;
+  seen.reserve(enabled_exts.size());
+
+  for (const char* name : enabled_exts)
+  {
+    if (!name)
+      continue;
+
+    // De-dup while preserving order
+    if (!seen.insert(name).second)
+      continue;
+
+    if (avail.find(name) != avail.end())
+    {
+      filtered_exts.push_back(name);
+    }
+    else
+    {
+      WARN_LOG_FMT(VIDEO, "Dropping unsupported device extension: {}", name);
+    }
   }
 
-  for (auto extension_name : EnabledExtensionNames)
+  // Side flag for VMA or other paths
+  DEDICATED_ALLOCATION = false;
+  for (const char* extension_name : filtered_exts)
   {
-    if (!strcmp(extension_name, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME))
-      DEDICATED_ALLOCATION = true;
-  }
+    if (extension_name &&
+      !std::strcmp(extension_name, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME))
+      {
+        DEDICATED_ALLOCATION = true;
+        break;
+      }
+    }
 
-  info.enabledLayerCount = (uint32_t)EnabledLayerNames.size();
-  info.ppEnabledLayerNames = info.enabledLayerCount ? EnabledLayerNames.data() : nullptr;
-  info.enabledExtensionCount = (uint32_t)EnabledExtensionNames.size();
-  info.ppEnabledExtensionNames =
-      info.enabledExtensionCount ? EnabledExtensionNames.data() : nullptr;
-  info.pEnabledFeatures = &EnabledFeatures;
+  // Finalize create-info with filtered lists
+  info.enabledLayerCount = static_cast<uint32_t>(enabled_layers.size());
+  info.ppEnabledLayerNames = info.enabledLayerCount ? enabled_layers.data() : nullptr;
 
+  info.enabledExtensionCount = static_cast<uint32_t>(filtered_exts.size());
+  info.ppEnabledExtensionNames = info.enabledExtensionCount ? filtered_exts.data() : nullptr;
+
+  info.pEnabledFeatures = &enabled_features;
+
+  // Call through to the original
   return vkCreateDevice_org(physicalDevice, &info, pAllocator, pDevice);
 }
 
@@ -324,7 +389,26 @@ static VKAPI_ATTR VkResult VKAPI_CALL vkQueuePresentKHR(VkQueue queue,
                     0, nullptr, vulkan->queue_index);
 #endif
   swapchain->condVar.notify_all();
-  video_cb(RETRO_HW_FRAME_BUFFER_VALID, g_framebuffer_manager->GetEFBWidth(), g_framebuffer_manager->GetEFBHeight(), 0);
+  uint32_t out_w = 0;
+  uint32_t out_h = 0;
+
+  if (g_framebuffer_manager)
+  {
+    if (AbstractTexture* efb_tex = g_framebuffer_manager->GetEFBColorTexture())
+    {
+      out_w = efb_tex->GetWidth();
+      out_h = efb_tex->GetHeight();
+    }
+  }
+
+  // Fallback: negotiated init dimensions (or a sane default).
+  if (out_w == 0 || out_h == 0)
+  {
+    out_w = Libretro::Video::Vk::initInfo.width ? Libretro::Video::Vk::initInfo.width : 640;
+    out_h = Libretro::Video::Vk::initInfo.height ? Libretro::Video::Vk::initInfo.height : 480;
+  }
+
+  video_cb(RETRO_HW_FRAME_BUFFER_VALID, out_w, out_h, 0);
   return VK_SUCCESS;
 }
 
@@ -498,15 +582,31 @@ void Init(VkInstance instance, VkPhysicalDevice gpu, VkSurfaceKHR surface,
   initInfo.width = -1;
   initInfo.height = -1;
   initInfo.get_instance_proc_addr = get_instance_proc_addr;
-  initInfo.required_device_extensions = required_device_extensions;
-  initInfo.num_required_device_extensions = num_required_device_extensions;
+
+  static const char* extra_extensions[] = {
+      "VK_KHR_get_physical_device_properties2"
+  };
+
+  static std::vector<const char*> combined_extensions;
+  combined_extensions.clear();
+  combined_extensions.reserve(num_required_device_extensions + std::size(extra_extensions));
+
+  for (unsigned i = 0; i < num_required_device_extensions; ++i)
+    combined_extensions.push_back(required_device_extensions[i]);
+  for (const char* ext : extra_extensions)
+    combined_extensions.push_back(ext);
+
+  initInfo.required_device_extensions = combined_extensions.data();
+  initInfo.num_required_device_extensions = static_cast<unsigned>(combined_extensions.size());
+
   initInfo.required_device_layers = required_device_layers;
   initInfo.num_required_device_layers = num_required_device_layers;
   initInfo.required_features = required_features;
 
-  vkGetInstanceProcAddr_org = ::vkGetInstanceProcAddr;
+  vkGetInstanceProcAddr_org = get_instance_proc_addr;
   ::vkGetInstanceProcAddr = vkGetInstanceProcAddr;
-  vkGetDeviceProcAddr_org = ::vkGetDeviceProcAddr;
+  vkGetDeviceProcAddr_org =
+    (PFN_vkGetDeviceProcAddr)vkGetInstanceProcAddr_org(instance, "vkGetDeviceProcAddr");
   ::vkGetDeviceProcAddr = vkGetDeviceProcAddr;
   ::vkCreateInstance = vkCreateInstance;
 }
