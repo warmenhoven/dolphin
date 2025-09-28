@@ -4,10 +4,7 @@
 #include "Common/Thread.h"
 
 #ifdef _WIN32
-#include <Windows.h>
-#endif
-
-#ifdef _MSC_VER
+#include <windows.h>
 #include <processthreadsapi.h>
 #else
 #include <pthread.h>
