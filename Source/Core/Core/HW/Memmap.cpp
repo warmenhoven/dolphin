@@ -251,6 +251,7 @@ void MemoryManager::UpdateLogicalMemory(const PowerPC::BatTable& dbat_table)
       u32 logical_size = PowerPC::BAT_PAGE_SIZE;
       u32 translated_address = dbat_table[i] & PowerPC::BAT_RESULT_MASK;
 
+#ifndef IPHONEOS
       while (i + 1 < dbat_table.size())
       {
         if (!(dbat_table[i + 1] & PowerPC::BAT_PHYSICAL_BIT))
@@ -265,6 +266,7 @@ void MemoryManager::UpdateLogicalMemory(const PowerPC::BatTable& dbat_table)
         ++i;
         logical_size += PowerPC::BAT_PAGE_SIZE;
       }
+#endif
 
       for (const auto& physical_region : m_physical_regions)
       {

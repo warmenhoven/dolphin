@@ -9,6 +9,16 @@
 #include <atomic>
 #include <cassert>
 
+#if defined(__APPLE__)
+#include <Availability.h>
+#if (defined(__TV_OS_VERSION_MIN_REQUIRED) && __TV_OS_VERSION_MIN_REQUIRED < 140000) || \
+    (defined(__IPHONE_OS_VERSION_MIN_REQUIRED) && __IPHONE_OS_VERSION_MIN_REQUIRED < 140000)
+#define DOLPHIN_NEEDS_ATOMIC_WAIT_FALLBACK 1
+#include <condition_variable>
+#include <mutex>
+#endif
+#endif
+
 #include "Common/TypeUtils.h"
 
 namespace Common
@@ -50,8 +60,14 @@ public:
 
   void WaitForEmpty() requires(IncludeWaitFunctionality)
   {
+#ifdef DOLPHIN_NEEDS_ATOMIC_WAIT_FALLBACK
+    std::unique_lock<std::mutex> lock(m_wait_mutex);
+    while (Size() > 0)
+      m_wait_cv.wait(lock);
+#else
     while (const std::size_t old_size = Size())
       m_size.wait(old_size, std::memory_order_acquire);
+#endif
   }
 
   // The following are only safe from the "consumer thread":
@@ -83,7 +99,13 @@ public:
 
   void WaitForData() requires(IncludeWaitFunctionality)
   {
+#ifdef DOLPHIN_NEEDS_ATOMIC_WAIT_FALLBACK
+    std::unique_lock<std::mutex> lock(m_wait_mutex);
+    while (Size() == 0)
+      m_wait_cv.wait(lock);
+#else
     m_size.wait(0, std::memory_order_acquire);
+#endif
   }
 
   void Clear()
@@ -106,10 +128,21 @@ private:
   {
     m_size.fetch_add(value, std::memory_order_release);
     if constexpr (IncludeWaitFunctionality)
+    {
+#ifdef DOLPHIN_NEEDS_ATOMIC_WAIT_FALLBACK
+      m_wait_cv.notify_one();
+#else
       m_size.notify_one();
+#endif
+    }
   }
 
   std::atomic<std::size_t> m_size = 0;
+
+#ifdef DOLPHIN_NEEDS_ATOMIC_WAIT_FALLBACK
+  std::mutex m_wait_mutex;
+  std::condition_variable m_wait_cv;
+#endif
 };
 }  // namespace detail
 

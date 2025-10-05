@@ -29,10 +29,18 @@
 #endif
 #endif
 
+#ifdef IPHONEOS
+#include "Common/JITMemoryTracker.h"
+#endif
+
 namespace Common
 {
 // This is purposely not a full wrapper for virtualalloc/mmap, but it
 // provides exactly the primitive operations that Dolphin needs.
+
+#ifdef IPHONEOS
+static JITMemoryTracker g_jit_memory_tracker;
+#endif
 
 void* AllocateExecutableMemory(size_t size)
 {
@@ -40,19 +48,31 @@ void* AllocateExecutableMemory(size_t size)
   void* ptr = VirtualAlloc(nullptr, size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 #else
   int map_flags = MAP_ANON | MAP_PRIVATE;
-#if defined(__APPLE__)
+#if defined(__APPLE__) && !defined(IPHONEOS)
   map_flags |= MAP_JIT;
 #endif
-  void* ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE | PROT_EXEC, map_flags, -1, 0);
+
+  int map_prot = PROT_READ | PROT_EXEC;
+#ifndef IPHONEOS
+  // The default protection is r-x on non-iOS platforms.
+  map_prot |= PROT_WRITE;
+#endif
+
+  void* ptr = mmap(nullptr, size, map_prot, map_flags, -1, 0);
   if (ptr == MAP_FAILED)
     ptr = nullptr;
 #endif
 
   if (ptr == nullptr)
-    PanicAlertFmt("Failed to allocate executable memory");
+    PanicAlertFmt("Failed to allocate executable memory: {}", LastStrerrorString());
+
+#ifdef IPHONEOS
+  g_jit_memory_tracker.RegisterJITRegion(ptr, size);
+#endif
 
   return ptr;
 }
+#ifndef IPHONEOS
 // This function is used to provide a counter for the JITPageWrite*Execute*
 // functions to enable nesting. The static variable is wrapped in a a function
 // to allow those functions to be called inside of the constructor of a static
@@ -94,7 +114,7 @@ static int& JITPageWriteNestCounter()
 // Allows a thread to write to executable memory, but not execute the data.
 void JITPageWriteEnableExecuteDisable()
 {
-#if defined(_M_ARM_64) && defined(__APPLE__)
+#if defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS)
   if (JITPageWriteNestCounter() == 0)
   {
     pthread_jit_write_protect_np(0);
@@ -113,13 +133,24 @@ void JITPageWriteDisableExecuteEnable()
   if (JITPageWriteNestCounter() < 0)
     PanicAlertFmt("JITPageWriteNestCounter() underflowed");
 
-#if defined(_M_ARM_64) && defined(__APPLE__)
+#if defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS)
   if (JITPageWriteNestCounter() == 0)
   {
     pthread_jit_write_protect_np(1);
   }
 #endif
 }
+#else
+void JITPageWriteEnableExecuteDisable(void* ptr)
+{
+  g_jit_memory_tracker.JITRegionWriteEnableExecuteDisable(ptr);
+}
+
+void JITPageWriteDisableExecuteEnable(void* ptr)
+{
+  g_jit_memory_tracker.JITRegionWriteDisableExecuteEnable(ptr);
+}
+#endif
 
 void* AllocateMemoryPages(size_t size)
 {
@@ -171,6 +202,10 @@ bool FreeMemoryPages(void* ptr, size_t size)
       return false;
     }
 #endif
+
+#ifdef IPHONEOS
+    g_jit_memory_tracker.UnregisterJITRegion(ptr);
+#endif
   }
   return true;
 }
@@ -215,7 +250,7 @@ bool WriteProtectMemory(void* ptr, size_t size, bool allowExecute)
     PanicAlertFmt("WriteProtectMemory failed!\nVirtualProtect: {}", GetLastErrorString());
     return false;
   }
-#elif !(defined(_M_ARM_64) && defined(__APPLE__))
+#elif !(defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS))
   // MacOS 11.2 on ARM does not allow for changing the access permissions of pages
   // that were marked executable, instead it uses the protections offered by MAP_JIT
   // for write protection.
@@ -237,7 +272,7 @@ bool UnWriteProtectMemory(void* ptr, size_t size, bool allowExecute)
     PanicAlertFmt("UnWriteProtectMemory failed!\nVirtualProtect: {}", GetLastErrorString());
     return false;
   }
-#elif !(defined(_M_ARM_64) && defined(__APPLE__))
+#elif !(defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS))
   // MacOS 11.2 on ARM does not allow for changing the access permissions of pages
   // that were marked executable, instead it uses the protections offered by MAP_JIT
   // for write protection.

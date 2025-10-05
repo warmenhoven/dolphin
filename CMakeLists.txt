@@ -485,6 +485,12 @@ if(ANDROID)
   SET(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 endif()
 
+if(IOS)
+  message(STATUS "Building for iOS")
+  add_definitions(-DIPHONEOS)
+  add_definitions(-DFMT_EXCEPTIONS=0)
+endif()
+
 if(LIBRETRO)
   set(ENABLE_ALSA OFF CACHE BOOL "" FORCE)
   set(ENABLE_ANALYTICS OFF CACHE BOOL "" FORCE)
@@ -786,7 +792,7 @@ else()
   add_subdirectory(Externals/libiconv-1.14 EXCLUDE_FROM_ALL)
 endif()
 
-if(NOT ANDROID AND NOT MINGW)
+if(NOT ANDROID AND NOT MINGW AND NOT IOS)
   dolphin_find_optional_system_library(HIDAPI Externals/hidapi)
 endif()
 
@@ -831,7 +837,9 @@ if (USE_RETRO_ACHIEVEMENTS)
 	add_subdirectory(Externals/rcheevos)
 endif()
 
-add_subdirectory(Externals/watcher)
+if (NOT IOS)
+  add_subdirectory(Externals/watcher)
+endif()
 
 ########################################
 # Pre-build events: Define configuration variables and write SCM info header

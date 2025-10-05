@@ -689,6 +689,7 @@ std::string GetBundleDirectory()
 {
   CFURLRef bundle_ref = CFBundleCopyBundleURL(CFBundleGetMainBundle());
 
+#ifndef IPHONEOS
   // Starting in macOS Sierra, apps downloaded from the Internet may be
   // "translocated" to a read-only DMG and executed from there. This is
   // done to prevent a scenario where an attacker can replace a trusted
@@ -720,6 +721,7 @@ std::string GetBundleDirectory()
     CFRelease(bundle_ref);
     bundle_ref = untranslocated_ref;
   }
+#endif
 
   char app_bundle_path[MAXPATHLEN];
   CFStringRef bundle_path = CFURLCopyFileSystemPath(bundle_ref, kCFURLPOSIXPathStyle);

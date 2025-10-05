@@ -35,6 +35,14 @@ include:
   - project: 'libretro-infrastructure/ci-templates'
     file: '/android-cmake.yml'
 
+  # iOS arm64
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/ios-cmake.yml'
+
+  # tvOS arm64
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/tvos-cmake.yml'
+
 # Stages for building
 stages:
   - build-prepare
@@ -93,3 +101,21 @@ android-arm64-v8a:
   variables:
     ANDROID_NDK_VERSION: 26.2.11394342
     NDK_ROOT: /android-sdk-linux/ndk/$ANDROID_NDK_VERSION
+
+# iOS arm64
+libretro-build-ios-arm64:
+  extends:
+    - .libretro-ios-cmake-arm64
+    - .core-defs
+  variables:
+    CMAKE_ADDL_COMP_FLAGS: ""
+    IOS_MINVER: 13.0
+
+# tvOS arm64
+libretro-build-tvos-arm64:
+  extends:
+    - .libretro-tvos-cmake-arm64
+    - .core-defs
+  variables:
+    CMAKE_ADDL_COMP_FLAGS: ""
+    MINVER: 13.0

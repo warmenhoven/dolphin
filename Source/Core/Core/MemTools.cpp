@@ -26,6 +26,7 @@
 #endif
 
 #if defined(__APPLE__)
+#include <TargetConditionals.h>
 #ifdef _M_X86_64
 #define THREAD_STATE64_COUNT x86_THREAD_STATE64_COUNT
 #define THREAD_STATE64 x86_THREAD_STATE64
@@ -119,7 +120,7 @@ bool IsExceptionHandlerSupported()
   return true;
 }
 
-#elif defined(__APPLE__) && !defined(USE_SIGACTION_ON_APPLE)
+#elif defined(__APPLE__) && !defined(USE_SIGACTION_ON_APPLE) && !TARGET_OS_TV
 
 static void CheckKR(const char* name, kern_return_t kr)
 {
@@ -255,7 +256,7 @@ bool IsExceptionHandlerSupported()
   return true;
 }
 
-#elif defined(_POSIX_VERSION) && !defined(_M_GENERIC)
+#elif defined(_POSIX_VERSION) && !defined(_M_GENERIC) && !(defined(TARGET_OS_TV) && TARGET_OS_TV)
 
 static struct sigaction old_sa_segv;
 static struct sigaction old_sa_bus;

@@ -187,7 +187,7 @@ PRIVATE
   FatFs
   Iconv::Iconv
   spng::spng
-  watcher
+  $<$<NOT:$<BOOL:${IOS}>>:watcher>
   ${VTUNE_LIBRARIES}
 )
 
@@ -239,6 +239,13 @@ elseif(WIN32)
   target_sources(common PRIVATE
     Logging/ConsoleListenerWin.cpp
     MemArenaWin.cpp
+  )
+elseif(IOS)
+  target_sources(common PRIVATE
+    Logging/ConsoleListenerNix.cpp
+    JITMemoryTracker.h
+    JITMemoryTracker.cpp
+    MemArenaDarwin.cpp
   )
 elseif(APPLE)
   target_sources(common PRIVATE
