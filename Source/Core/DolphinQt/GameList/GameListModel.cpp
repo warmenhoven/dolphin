@@ -1,14 +1,16 @@
 // Copyright 2015 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/GameList/GameListModel.h"
 
 #include <QDir>
 #include <QFileInfo>
 #include <QPixmap>
+#include <QRegularExpression>
 
-#include "Core/ConfigManager.h"
+#include "Core/Config/MainSettings.h"
+#include "Core/Core.h"
+#include "Core/TimePlayed.h"
 
 #include "DiscIO/Enums.h"
 
@@ -32,6 +34,8 @@ GameListModel::GameListModel(QObject* parent) : QAbstractTableModel(parent)
           &GameTracker::RefreshAll);
   connect(&Settings::Instance(), &Settings::TitleDBReloadRequested,
           [this] { m_title_database = Core::TitleDatabase(); });
+  connect(&Settings::Instance(), &Settings::EmulationStateChanged, this,
+          &GameListModel::OnEmulationStateChanged);
 
   for (const QString& dir : Settings::Instance().GetPaths())
     m_tracker.AddDirectory(dir);
@@ -58,27 +62,27 @@ QVariant GameListModel::data(const QModelIndex& index, int role) const
 
   const UICommon::GameFile& game = *m_games[index.row()];
 
-  switch (index.column())
+  switch (static_cast<Column>(index.column()))
   {
-  case COL_PLATFORM:
+  case Column::Platform:
     if (role == Qt::DecorationRole)
-      return Resources::GetPlatform(game.GetPlatform());
+      return Resources::GetPlatform(game.GetPlatform()).pixmap(32, 32);
     if (role == SORT_ROLE)
       return static_cast<int>(game.GetPlatform());
     break;
-  case COL_COUNTRY:
+  case Column::Country:
     if (role == Qt::DecorationRole)
-      return Resources::GetCountry(game.GetCountry());
+      return Resources::GetCountry(game.GetCountry()).pixmap(32, 22);
     if (role == SORT_ROLE)
       return static_cast<int>(game.GetCountry());
     break;
-  case COL_BANNER:
+  case Column::Banner:
     if (role == Qt::DecorationRole)
     {
       // GameCube banners are 96x32, but Wii banners are 192x64.
       QPixmap banner = ToQPixmap(game.GetBannerImage());
       if (banner.isNull())
-        banner = Resources::GetMisc(Resources::MiscID::BannerMissing);
+        banner = Resources::GetMisc(Resources::MiscID::BannerMissing).pixmap(GAMECUBE_BANNER_SIZE);
 
       banner.setDevicePixelRatio(
           std::max(static_cast<qreal>(banner.width()) / GAMECUBE_BANNER_SIZE.width(),
@@ -87,18 +91,19 @@ QVariant GameListModel::data(const QModelIndex& index, int role) const
       return banner;
     }
     break;
-  case COL_TITLE:
+  case Column::Title:
     if (role == Qt::DisplayRole || role == SORT_ROLE)
     {
       QString name = QString::fromStdString(game.GetName(m_title_database));
 
-      // Add disc numbers > 1 to title if not present.
-      const int disc_nr = game.GetDiscNumber() + 1;
-      if (disc_nr > 1)
+      const int disc_number = game.GetDiscNumber() + 1;
+      if (disc_number > 1 || game.IsTwoDiscGame())
       {
-        if (!name.contains(QRegExp(QStringLiteral("disc ?%1").arg(disc_nr), Qt::CaseInsensitive)))
+        // Add disc number to title if not present.
+        if (!name.contains(QRegularExpression(QStringLiteral("disc ?%1").arg(disc_number),
+                                              QRegularExpression::CaseInsensitiveOption)))
         {
-          name.append(tr(" (Disc %1)").arg(disc_nr));
+          name.append(tr(" (Disc %1)").arg(disc_number));
         }
       }
 
@@ -107,11 +112,14 @@ QVariant GameListModel::data(const QModelIndex& index, int role) const
       {
         constexpr int MAX_NUMBER_LENGTH = 10;
 
-        QRegExp rx(QStringLiteral("\\d+"));
+        const QRegularExpression rx(QStringLiteral("\\d+"));
+        QRegularExpressionMatch match;
         int pos = 0;
-        while ((pos = rx.indexIn(name, pos)) != -1)
+        while ((match = rx.match(name, pos)).hasMatch())
         {
-          name.replace(pos, rx.matchedLength(), rx.cap().rightJustified(MAX_NUMBER_LENGTH));
+          pos = match.capturedStart();
+          name.replace(pos, match.capturedLength(),
+                       match.captured().rightJustified(MAX_NUMBER_LENGTH));
           pos += MAX_NUMBER_LENGTH;
         }
       }
@@ -119,11 +127,11 @@ QVariant GameListModel::data(const QModelIndex& index, int role) const
       return name;
     }
     break;
-  case COL_ID:
+  case Column::ID:
     if (role == Qt::DisplayRole || role == SORT_ROLE)
       return QString::fromStdString(game.GetGameID());
     break;
-  case COL_DESCRIPTION:
+  case Column::Description:
     if (role == Qt::DisplayRole || role == SORT_ROLE)
     {
       return QString::fromStdString(
@@ -131,18 +139,18 @@ QVariant GameListModel::data(const QModelIndex& index, int role) const
           .replace(QLatin1Char('\n'), QLatin1Char(' '));
     }
     break;
-  case COL_MAKER:
+  case Column::Maker:
     if (role == Qt::DisplayRole || role == SORT_ROLE)
     {
       return QString::fromStdString(
           game.GetMaker(UICommon::GameFile::Variant::LongAndPossiblyCustom));
     }
     break;
-  case COL_FILE_NAME:
+  case Column::FileName:
     if (role == Qt::DisplayRole || role == SORT_ROLE)
       return QString::fromStdString(game.GetFileName());
     break;
-  case COL_FILE_PATH:
+  case Column::FilePath:
     if (role == Qt::DisplayRole || role == SORT_ROLE)
     {
       QString file_path = QDir::toNativeSeparators(
@@ -152,7 +160,7 @@ QVariant GameListModel::data(const QModelIndex& index, int role) const
       return file_path;
     }
     break;
-  case COL_SIZE:
+  case Column::Size:
     if (role == Qt::DisplayRole)
     {
       std::string str = UICommon::FormatSize(game.GetFileSize());
@@ -166,24 +174,43 @@ QVariant GameListModel::data(const QModelIndex& index, int role) const
     if (role == SORT_ROLE)
       return static_cast<quint64>(game.GetFileSize());
     break;
-  case COL_FILE_FORMAT:
+  case Column::FileFormat:
     if (role == Qt::DisplayRole || role == SORT_ROLE)
       return QString::fromStdString(game.GetFileFormatName());
     break;
-  case COL_BLOCK_SIZE:
+  case Column::BlockSize:
     if (role == Qt::DisplayRole)
       return QString::fromStdString(UICommon::FormatSize(game.GetBlockSize()));
     if (role == SORT_ROLE)
       return static_cast<quint64>(game.GetBlockSize());
     break;
-  case COL_COMPRESSION:
+  case Column::Compression:
     if (role == Qt::DisplayRole || role == SORT_ROLE)
     {
       const QString compression = QString::fromStdString(game.GetCompressionMethod());
       return compression.isEmpty() ? tr("No Compression") : compression;
     }
     break;
-  case COL_TAGS:
+  case Column::TimePlayed:
+    if (role == Qt::DisplayRole)
+    {
+      const std::string game_id = game.GetGameID();
+      const std::chrono::milliseconds total_time = m_timer.GetTimePlayed(game_id);
+      const auto total_minutes = std::chrono::duration_cast<std::chrono::minutes>(total_time);
+      const auto total_hours = std::chrono::duration_cast<std::chrono::hours>(total_time);
+
+      // i18n: A time displayed as hours and minutes
+      QString formatted_time =
+          tr("%1h %2m").arg(total_hours.count()).arg(total_minutes.count() % 60);
+      return formatted_time;
+    }
+    if (role == SORT_ROLE)
+    {
+      const std::string game_id = game.GetGameID();
+      return static_cast<qlonglong>(m_timer.GetTimePlayed(game_id).count());
+    }
+    break;
+  case Column::Tags:
     if (role == Qt::DisplayRole || role == SORT_ROLE)
     {
       auto tags = GetGameTags(game.GetFilePath());
@@ -191,6 +218,9 @@ QVariant GameListModel::data(const QModelIndex& index, int role) const
 
       return tags.join(QStringLiteral(", "));
     }
+    break;
+  default:
+    break;
   }
 
   return QVariant();
@@ -201,32 +231,36 @@ QVariant GameListModel::headerData(int section, Qt::Orientation orientation, int
   if (orientation == Qt::Vertical || role != Qt::DisplayRole)
     return QVariant();
 
-  switch (section)
+  switch (static_cast<Column>(section))
   {
-  case COL_TITLE:
+  case Column::Title:
     return tr("Title");
-  case COL_ID:
+  case Column::ID:
     return tr("ID");
-  case COL_BANNER:
+  case Column::Banner:
     return tr("Banner");
-  case COL_DESCRIPTION:
+  case Column::Description:
     return tr("Description");
-  case COL_MAKER:
+  case Column::Maker:
     return tr("Maker");
-  case COL_FILE_NAME:
+  case Column::FileName:
     return tr("File Name");
-  case COL_FILE_PATH:
+  case Column::FilePath:
     return tr("File Path");
-  case COL_SIZE:
+  case Column::Size:
     return tr("Size");
-  case COL_FILE_FORMAT:
+  case Column::FileFormat:
     return tr("File Format");
-  case COL_BLOCK_SIZE:
+  case Column::BlockSize:
     return tr("Block Size");
-  case COL_COMPRESSION:
+  case Column::Compression:
     return tr("Compression");
-  case COL_TAGS:
+  case Column::TimePlayed:
+    return tr("Time Played");
+  case Column::Tags:
     return tr("Tags");
+  default:
+    break;
   }
   return QVariant();
 }
@@ -242,30 +276,41 @@ int GameListModel::columnCount(const QModelIndex& parent) const
 {
   if (parent.isValid())
     return 0;
-  return NUM_COLS;
+  return static_cast<int>(Column::Count);
 }
 
 bool GameListModel::ShouldDisplayGameListItem(int index) const
 {
   const UICommon::GameFile& game = *m_games[index];
 
-  if (!m_term.isEmpty() &&
-      !QString::fromStdString(game.GetName(m_title_database)).contains(m_term, Qt::CaseInsensitive))
+  if (!m_term.isEmpty())
   {
-    return false;
+    const bool matches_title = QString::fromStdString(game.GetName(m_title_database))
+                                   .contains(m_term, Qt::CaseInsensitive);
+    const bool filename_visible = Config::Get(Config::MAIN_GAMELIST_COLUMN_FILE_NAME);
+    const bool list_view_selected = Settings::Instance().GetPreferredView();
+    const bool matches_filename =
+        filename_visible && list_view_selected &&
+        QString::fromStdString(game.GetFileName()).contains(m_term, Qt::CaseInsensitive);
+    if (!(matches_title || matches_filename))
+    {
+      return false;
+    }
   }
 
   const bool show_platform = [&game] {
     switch (game.GetPlatform())
     {
     case DiscIO::Platform::GameCubeDisc:
-      return SConfig::GetInstance().m_ListGC;
+      return Config::Get(Config::MAIN_GAMELIST_LIST_GC);
+    case DiscIO::Platform::Triforce:
+      return Config::Get(Config::MAIN_GAMELIST_LIST_TRI);
     case DiscIO::Platform::WiiDisc:
-      return SConfig::GetInstance().m_ListWii;
+      return Config::Get(Config::MAIN_GAMELIST_LIST_WII);
     case DiscIO::Platform::WiiWAD:
-      return SConfig::GetInstance().m_ListWad;
+      return Config::Get(Config::MAIN_GAMELIST_LIST_WAD);
     case DiscIO::Platform::ELFOrDOL:
-      return SConfig::GetInstance().m_ListElfDol;
+      return Config::Get(Config::MAIN_GAMELIST_LIST_ELF_DOL);
     default:
       return false;
     }
@@ -277,34 +322,34 @@ bool GameListModel::ShouldDisplayGameListItem(int index) const
   switch (game.GetCountry())
   {
   case DiscIO::Country::Australia:
-    return SConfig::GetInstance().m_ListAustralia;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_AUSTRALIA);
   case DiscIO::Country::Europe:
-    return SConfig::GetInstance().m_ListPal;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_PAL);
   case DiscIO::Country::France:
-    return SConfig::GetInstance().m_ListFrance;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_FRANCE);
   case DiscIO::Country::Germany:
-    return SConfig::GetInstance().m_ListGermany;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_GERMANY);
   case DiscIO::Country::Italy:
-    return SConfig::GetInstance().m_ListItaly;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_ITALY);
   case DiscIO::Country::Japan:
-    return SConfig::GetInstance().m_ListJap;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_JPN);
   case DiscIO::Country::Korea:
-    return SConfig::GetInstance().m_ListKorea;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_KOREA);
   case DiscIO::Country::Netherlands:
-    return SConfig::GetInstance().m_ListNetherlands;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_NETHERLANDS);
   case DiscIO::Country::Russia:
-    return SConfig::GetInstance().m_ListRussia;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_RUSSIA);
   case DiscIO::Country::Spain:
-    return SConfig::GetInstance().m_ListSpain;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_SPAIN);
   case DiscIO::Country::Taiwan:
-    return SConfig::GetInstance().m_ListTaiwan;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_TAIWAN);
   case DiscIO::Country::USA:
-    return SConfig::GetInstance().m_ListUsa;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_USA);
   case DiscIO::Country::World:
-    return SConfig::GetInstance().m_ListWorld;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_WORLD);
   case DiscIO::Country::Unknown:
   default:
-    return SConfig::GetInstance().m_ListUnknown;
+    return Config::Get(Config::MAIN_GAMELIST_LIST_UNKNOWN);
   }
 }
 
@@ -313,14 +358,9 @@ std::shared_ptr<const UICommon::GameFile> GameListModel::GetGameFile(int index) 
   return m_games[index];
 }
 
-QString GameListModel::GetPath(int index) const
+std::string GameListModel::GetNetPlayName(const UICommon::GameFile& game) const
 {
-  return QString::fromStdString(m_games[index]->GetFilePath());
-}
-
-QString GameListModel::GetUniqueIdentifier(int index) const
-{
-  return QString::fromStdString(m_games[index]->GetUniqueIdentifier());
+  return game.GetNetPlayName(m_title_database);
 }
 
 void GameListModel::AddGame(const std::shared_ptr<const UICommon::GameFile>& game)
@@ -430,6 +470,13 @@ void GameListModel::AddGameTag(const std::string& path, const QString& name)
 
   m_game_tags[QString::fromStdString(path)] = tags;
   Settings::GetQSettings().setValue(QStringLiteral("gamelist/game_tags"), m_game_tags);
+
+  const int row = FindGameIndex(path);
+  if (row >= 0)
+  {
+    const QModelIndex index = createIndex(row, static_cast<int>(Column::Tags));
+    emit dataChanged(index, index);
+  }
 }
 
 void GameListModel::RemoveGameTag(const std::string& path, const QString& name)
@@ -441,6 +488,13 @@ void GameListModel::RemoveGameTag(const std::string& path, const QString& name)
   m_game_tags[QString::fromStdString(path)] = tags;
 
   Settings::GetQSettings().setValue(QStringLiteral("gamelist/game_tags"), m_game_tags);
+
+  const int row = FindGameIndex(path);
+  if (row >= 0)
+  {
+    const QModelIndex index = createIndex(row, static_cast<int>(Column::Tags));
+    emit dataChanged(index, index);
+  }
 }
 
 void GameListModel::NewTag(const QString& name)
@@ -466,4 +520,12 @@ void GameListModel::DeleteTag(const QString& name)
 void GameListModel::PurgeCache()
 {
   m_tracker.PurgeCache();
+}
+
+void GameListModel::OnEmulationStateChanged(Core::State state)
+{
+  if (state == Core::State::Uninitialized)
+  {
+    m_timer.Reload();
+  }
 }

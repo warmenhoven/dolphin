@@ -1,6 +1,5 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -16,6 +15,7 @@ namespace DiscIO
 enum class Platform
 {
   GameCubeDisc = 0,
+  Triforce,
   WiiDisc,
   WiiWAD,
   ELFOrDOL,
@@ -71,10 +71,14 @@ enum class Language
 
 std::string GetName(Country country, bool translate);
 std::string GetName(Language language, bool translate);
+std::string GetName(Region region, bool translate);
 
 bool IsDisc(Platform volume_type);
 bool IsWii(Platform volume_type);
 bool IsNTSC(Region region);
+
+int ToGameCubeLanguage(Language language);
+Language FromGameCubeLanguage(int language);
 
 Country TypicalCountryForRegion(Region region);
 Region SysConfCountryToRegion(u8 country_code);
@@ -86,7 +90,7 @@ Country CountryCodeToCountry(u8 country_code, Platform platform, Region region =
                              std::optional<u16> revision = {});
 
 Region GetSysMenuRegion(u16 title_version);
-std::string GetSysMenuVersionString(u16 title_version);
+std::string GetSysMenuVersionString(u16 title_version, bool is_vwii);
 
 const std::string& GetCompanyFromID(const std::string& company_id);
 }  // namespace DiscIO

@@ -1,12 +1,11 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
 namespace AudioCommon
 {
-enum class DPL2Quality
+enum class DPL2Quality : int
 {
   Lowest = 0,
   Low = 1,

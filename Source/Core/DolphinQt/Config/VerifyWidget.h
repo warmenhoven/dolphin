@@ -1,6 +1,5 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -16,6 +15,10 @@
 #include <QTextEdit>
 #include <QWidget>
 
+namespace Core
+{
+enum class State;
+}
 namespace DiscIO
 {
 class Volume;
@@ -28,6 +31,7 @@ public:
   explicit VerifyWidget(std::shared_ptr<DiscIO::Volume> volume);
 
 private:
+  void OnEmulationStateChanged(Core::State state);
   void CreateWidgets();
   std::pair<QCheckBox*, QLineEdit*> AddHashLine(QFormLayout* layout, QString text);
   void ConnectWidgets();

@@ -1,11 +1,9 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
 #include <algorithm>
-#include <cctype>
 #include <list>
 #include <map>
 #include <string>
@@ -15,30 +13,8 @@
 #include "Common/CommonTypes.h"
 #include "Common/StringUtil.h"
 
-struct CaseInsensitiveStringCompare
+namespace Common
 {
-  // Allow heterogenous lookup.
-  using is_transparent = void;
-
-  bool operator()(std::string_view a, std::string_view b) const
-  {
-    return std::lexicographical_compare(
-        a.begin(), a.end(), b.begin(), b.end(), [](char lhs, char rhs) {
-          return std::tolower(static_cast<u8>(lhs)) < std::tolower(static_cast<u8>(rhs));
-        });
-  }
-
-  static bool IsEqual(std::string_view a, std::string_view b)
-  {
-    if (a.size() != b.size())
-      return false;
-
-    return std::equal(a.begin(), a.end(), b.begin(), b.end(), [](char lhs, char rhs) {
-      return std::tolower(static_cast<u8>(lhs)) == std::tolower(static_cast<u8>(rhs));
-    });
-  }
-};
-
 class IniFile
 {
 public:
@@ -87,7 +63,7 @@ public:
     bool GetLines(std::vector<std::string>* lines, const bool remove_comments = true) const;
 
     bool operator<(const Section& other) const { return name < other.name; }
-    using SectionMap = std::map<std::string, std::string, CaseInsensitiveStringCompare>;
+    using SectionMap = std::map<std::string, std::string, CaseInsensitiveLess>;
 
     const std::string& GetName() const { return name; }
     const SectionMap& GetValues() const { return values; }
@@ -154,6 +130,8 @@ public:
   void SortSections();
 
   Section* GetOrCreateSection(std::string_view section_name);
+  const Section* GetSection(std::string_view section_name) const;
+  Section* GetSection(std::string_view section_name);
 
   // This function is related to parsing data from lines of INI files
   // It's used outside of IniFile, which is why it is exposed publicly
@@ -165,8 +143,6 @@ public:
 private:
   std::list<Section> sections;
 
-  const Section* GetSection(std::string_view section_name) const;
-  Section* GetSection(std::string_view section_name);
-
   static const std::string& NULL_STRING;
 };
+}  // namespace Common

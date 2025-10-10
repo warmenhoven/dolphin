@@ -1,25 +1,23 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinNoGUI/Platform.h"
 
-#include "Common/MsgHandler.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
-#include "Core/State.h"
+#include "Core/System.h"
 
 #include <Windows.h>
 #include <climits>
-#include <cstdio>
+#include <dwmapi.h>
 
-#include "VideoCommon/RenderBase.h"
+#include "VideoCommon/Present.h"
 #include "resource.h"
 
 namespace
 {
-class PlatformWin32 : public Platform
+class PlatformWin32 final : public Platform
 {
 public:
   ~PlatformWin32() override;
@@ -28,14 +26,14 @@ public:
   void SetTitle(const std::string& string) override;
   void MainLoop() override;
 
-  WindowSystemInfo GetWindowSystemInfo() const;
+  WindowSystemInfo GetWindowSystemInfo() const override;
 
 private:
   static constexpr TCHAR WINDOW_CLASS_NAME[] = _T("DolphinNoGUI");
 
   static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-  bool RegisterRenderWindowClass();
+  static bool RegisterRenderWindowClass();
   bool CreateRenderWindow();
   void UpdateWindowPosition();
   void ProcessEvents();
@@ -63,12 +61,12 @@ bool PlatformWin32::RegisterRenderWindowClass()
   wc.cbClsExtra = 0;
   wc.cbWndExtra = 0;
   wc.hInstance = GetModuleHandle(nullptr);
-  wc.hIcon = LoadIcon(NULL, IDI_ICON1);
-  wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-  wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-  wc.lpszMenuName = NULL;
+  wc.hIcon = LoadIcon(nullptr, IDI_ICON1);
+  wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+  wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+  wc.lpszMenuName = nullptr;
   wc.lpszClassName = WINDOW_CLASS_NAME;
-  wc.hIconSm = LoadIcon(NULL, IDI_ICON1);
+  wc.hIconSm = LoadIcon(nullptr, IDI_ICON1);
 
   if (!RegisterClassEx(&wc))
   {
@@ -107,6 +105,9 @@ bool PlatformWin32::Init()
     ProcessEvents();
   }
 
+  if (Config::Get(Config::MAIN_DISABLE_SCREENSAVER))
+    SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
+
   UpdateWindowPosition();
   return true;
 }
@@ -121,7 +122,7 @@ void PlatformWin32::MainLoop()
   while (IsRunning())
   {
     UpdateRunningFlag();
-    Core::HostDispatchJobs();
+    Core::HostDispatchJobs(Core::System::GetInstance());
     ProcessEvents();
     UpdateWindowPosition();
 
@@ -164,23 +165,35 @@ void PlatformWin32::ProcessEvents()
   }
 }
 
-LRESULT PlatformWin32::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+LRESULT PlatformWin32::WndProc(const HWND hwnd, const UINT msg, const WPARAM wParam,
+                               const LPARAM lParam)
 {
   PlatformWin32* platform = reinterpret_cast<PlatformWin32*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
   switch (msg)
   {
   case WM_NCCREATE:
   {
-    platform =
-        reinterpret_cast<PlatformWin32*>(reinterpret_cast<CREATESTRUCT*>(lParam)->lpCreateParams);
+    platform = static_cast<PlatformWin32*>(reinterpret_cast<CREATESTRUCT*>(lParam)->lpCreateParams);
     SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(platform));
     return DefWindowProc(hwnd, msg, wParam, lParam);
   }
 
+  case WM_CREATE:
+  {
+    if (hwnd)
+    {
+      // Remove rounded corners from the render window on Windows 11
+      constexpr DWM_WINDOW_CORNER_PREFERENCE corner_preference = DWMWCP_DONOTROUND;
+      DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner_preference,
+                            sizeof(corner_preference));
+    }
+  }
+  break;
+
   case WM_SIZE:
   {
-    if (g_renderer)
-      g_renderer->ResizeSurface();
+    if (g_presenter)
+      g_presenter->ResizeSurface();
   }
   break;
 

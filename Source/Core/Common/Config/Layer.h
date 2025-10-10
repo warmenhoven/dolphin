@@ -1,6 +1,5 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -9,7 +8,6 @@
 #include <optional>
 #include <string>
 #include <type_traits>
-#include <vector>
 
 #include "Common/Config/ConfigInfo.h"
 #include "Common/Config/Enums.h"
@@ -17,9 +15,16 @@
 
 namespace Config
 {
+// Setting a key to an object of this type will delete the key.
+struct DefaultState
+{
+  friend constexpr bool operator==(DefaultState, DefaultState) { return true; }
+};
+
 namespace detail
 {
-template <typename T, std::enable_if_t<!std::is_enum<T>::value>* = nullptr>
+template <typename T>
+requires(!Common::Enum<T>)
 std::optional<T> TryParse(const std::string& str_value)
 {
   T value;
@@ -28,7 +33,7 @@ std::optional<T> TryParse(const std::string& str_value)
   return value;
 }
 
-template <typename T, std::enable_if_t<std::is_enum<T>::value>* = nullptr>
+template <Common::Enum T>
 std::optional<T> TryParse(const std::string& str_value)
 {
   const auto result = TryParse<std::underlying_type_t<T>>(str_value);
@@ -45,7 +50,7 @@ inline std::optional<std::string> TryParse(const std::string& str_value)
 }  // namespace detail
 
 template <typename T>
-struct Info;
+class Info;
 
 class Layer;
 using LayerMap = std::map<Location, std::optional<std::string>>;
@@ -105,7 +110,7 @@ public:
   template <typename T>
   T Get(const Info<T>& config_info) const
   {
-    return Get<T>(config_info.location).value_or(config_info.default_value);
+    return Get<T>(config_info.GetLocation()).value_or(config_info.GetDefaultValue());
   }
 
   template <typename T>
@@ -118,25 +123,36 @@ public:
   }
 
   template <typename T>
-  void Set(const Info<T>& config_info, const std::common_type_t<T>& value)
+  bool Set(const Info<T>& config_info, DefaultState)
   {
-    Set(config_info.location, value);
+    return DeleteKey(config_info.GetLocation());
   }
 
   template <typename T>
-  void Set(const Location& location, const T& value)
+  bool Set(const Info<T>& config_info, const std::common_type_t<T>& value)
   {
-    Set(location, ValueToString(value));
+    return Set(config_info.GetLocation(), value);
   }
 
-  void Set(const Location& location, std::string new_value)
+  bool Set(const Location& location, DefaultState) { return DeleteKey(location); }
+
+  template <typename T>
+  bool Set(const Location& location, const T& value)
+  {
+    return Set(location, ValueToString(value));
+  }
+
+  bool Set(const Location& location, std::string new_value)
   {
     const auto iter = m_map.find(location);
     if (iter != m_map.end() && iter->second == new_value)
-      return;
+      return false;
     m_is_dirty = true;
     m_map.insert_or_assign(location, std::move(new_value));
+    return true;
   }
+
+  void MarkAsDirty() { m_is_dirty = true; }
 
   Section GetSection(System system, const std::string& section);
   ConstSection GetSection(System system, const std::string& section) const;

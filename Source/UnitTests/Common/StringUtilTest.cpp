@@ -1,45 +1,11 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <gtest/gtest.h>
 #include <string>
 #include <vector>
 
 #include "Common/StringUtil.h"
-
-TEST(StringUtil, JoinStrings)
-{
-  EXPECT_EQ("", JoinStrings({}, ", "));
-  EXPECT_EQ("a", JoinStrings({"a"}, ","));
-  EXPECT_EQ("ab", JoinStrings({"a", "b"}, ""));
-  EXPECT_EQ("a, bb, c", JoinStrings({"a", "bb", "c"}, ", "));
-  EXPECT_EQ("???", JoinStrings({"?", "?"}, "?"));
-}
-
-TEST(StringUtil, StringBeginsWith)
-{
-  EXPECT_TRUE(StringBeginsWith("abc", "a"));
-  EXPECT_FALSE(StringBeginsWith("abc", "b"));
-  EXPECT_TRUE(StringBeginsWith("abc", "ab"));
-  EXPECT_FALSE(StringBeginsWith("a", "ab"));
-  EXPECT_FALSE(StringBeginsWith("", "a"));
-  EXPECT_FALSE(StringBeginsWith("", "ab"));
-  EXPECT_TRUE(StringBeginsWith("abc", ""));
-  EXPECT_TRUE(StringBeginsWith("", ""));
-}
-
-TEST(StringUtil, StringEndsWith)
-{
-  EXPECT_TRUE(StringEndsWith("abc", "c"));
-  EXPECT_FALSE(StringEndsWith("abc", "b"));
-  EXPECT_TRUE(StringEndsWith("abc", "bc"));
-  EXPECT_FALSE(StringEndsWith("a", "ab"));
-  EXPECT_FALSE(StringEndsWith("", "a"));
-  EXPECT_FALSE(StringEndsWith("", "ab"));
-  EXPECT_TRUE(StringEndsWith("abc", ""));
-  EXPECT_TRUE(StringEndsWith("", ""));
-}
 
 TEST(StringUtil, StringPopBackIf)
 {
@@ -91,7 +57,7 @@ static void DoRoundTripTest(const std::vector<T>& data)
   for (const T& e : data)
   {
     const std::string s = ValueToString(e);
-    T out;
+    T out = T();
     EXPECT_TRUE(TryParse(s, &out));
     EXPECT_EQ(e, out);
   }
@@ -104,4 +70,189 @@ TEST(StringUtil, ToString_TryParse_Roundtrip)
   DoRoundTripTest<unsigned int>({0u, 1u, 123u, 123456789u, 4023456789u});
   DoRoundTripTest<float>({0.0f, 1.0f, -1.0f, -0.5f, 0.5f, -1e-3f, 1e-3f, 1e3f, -1e3f});
   DoRoundTripTest<double>({0.0, 1.0, -1.0, -0.5, 0.5, -1e-3, 1e-3, 1e3, -1e3});
+}
+
+TEST(StringUtil, GetEscapedHtml)
+{
+  static constexpr auto no_escape_needed =
+      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+      "!@#$%^*()-_=+,./?;:[]{}| \\\t\n";
+  EXPECT_EQ(Common::GetEscapedHtml(no_escape_needed), no_escape_needed);
+  EXPECT_EQ(Common::GetEscapedHtml("&<>'\""), "&amp;&lt;&gt;&apos;&quot;");
+  EXPECT_EQ(Common::GetEscapedHtml("&&&"), "&amp;&amp;&amp;");
+}
+
+TEST(StringUtil, SplitPath)
+{
+  std::string path;
+  std::string filename;
+  std::string extension;
+  EXPECT_TRUE(SplitPath("/usr/lib/some_file.txt", &path, &filename, &extension));
+  EXPECT_EQ(path, "/usr/lib/");
+  EXPECT_EQ(filename, "some_file");
+  EXPECT_EQ(extension, ".txt");
+}
+
+TEST(StringUtil, SplitPathNullOutputPathAllowed)
+{
+  std::string filename;
+  std::string extension;
+  EXPECT_TRUE(SplitPath("/usr/lib/some_file.txt", /*path=*/nullptr, &filename, &extension));
+  EXPECT_EQ(filename, "some_file");
+  EXPECT_EQ(extension, ".txt");
+}
+
+TEST(StringUtil, SplitPathNullOutputFilenameAllowed)
+{
+  std::string path;
+  std::string extension;
+  EXPECT_TRUE(SplitPath("/usr/lib/some_file.txt", &path, /*filename=*/nullptr, &extension));
+  EXPECT_EQ(path, "/usr/lib/");
+  EXPECT_EQ(extension, ".txt");
+}
+
+TEST(StringUtil, SplitPathNullOutputExtensionAllowed)
+{
+  std::string path;
+  std::string filename;
+  EXPECT_TRUE(SplitPath("/usr/lib/some_file.txt", &path, &filename, /*extension=*/nullptr));
+  EXPECT_EQ(path, "/usr/lib/");
+  EXPECT_EQ(filename, "some_file");
+}
+
+TEST(StringUtil, SplitPathReturnsFalseIfFullPathIsEmpty)
+{
+  std::string path;
+  std::string filename;
+  std::string extension;
+  EXPECT_FALSE(SplitPath(/*full_path=*/"", &path, &filename, &extension));
+  EXPECT_EQ(path, "");
+  EXPECT_EQ(filename, "");
+  EXPECT_EQ(extension, "");
+}
+
+TEST(StringUtil, SplitPathNoPath)
+{
+  std::string path;
+  std::string filename;
+  std::string extension;
+  EXPECT_TRUE(SplitPath("some_file.txt", &path, &filename, &extension));
+  EXPECT_EQ(path, "");
+  EXPECT_EQ(filename, "some_file");
+  EXPECT_EQ(extension, ".txt");
+}
+
+TEST(StringUtil, SplitPathNoFileName)
+{
+  std::string path;
+  std::string filename;
+  std::string extension;
+  EXPECT_TRUE(SplitPath("/usr/lib/.txt", &path, &filename, &extension));
+  EXPECT_EQ(path, "/usr/lib/");
+  EXPECT_EQ(filename, "");
+  EXPECT_EQ(extension, ".txt");
+}
+
+TEST(StringUtil, SplitPathNoExtension)
+{
+  std::string path;
+  std::string filename;
+  std::string extension;
+  EXPECT_TRUE(SplitPath("/usr/lib/some_file", &path, &filename, &extension));
+  EXPECT_EQ(path, "/usr/lib/");
+  EXPECT_EQ(filename, "some_file");
+  EXPECT_EQ(extension, "");
+}
+
+TEST(StringUtil, SplitPathDifferentPathLengths)
+{
+  std::string path;
+  std::string filename;
+  std::string extension;
+  EXPECT_TRUE(SplitPath("/usr/some_file.txt", &path, &filename, &extension));
+  EXPECT_EQ(path, "/usr/");
+  EXPECT_EQ(filename, "some_file");
+  EXPECT_EQ(extension, ".txt");
+
+  EXPECT_TRUE(SplitPath("/usr/lib/foo/some_file.txt", &path, &filename, &extension));
+  EXPECT_EQ(path, "/usr/lib/foo/");
+  EXPECT_EQ(filename, "some_file");
+  EXPECT_EQ(extension, ".txt");
+}
+
+TEST(StringUtil, SplitPathBackslashesNotRecognizedAsSeparators)
+{
+  std::string path;
+  std::string filename;
+  std::string extension;
+  EXPECT_TRUE(SplitPath("\\usr\\some_file.txt", &path, &filename, &extension));
+  EXPECT_EQ(path, "");
+  EXPECT_EQ(filename, "\\usr\\some_file");
+  EXPECT_EQ(extension, ".txt");
+}
+
+#ifdef _WIN32
+TEST(StringUtil, SplitPathWindowsPathWithDriveLetter)
+{
+  // Verify that on Windows, valid paths that include a drive letter and volume separator (e.g.,
+  // "C:") parse correctly.
+  std::string path;
+  std::string filename;
+  std::string extension;
+
+  // Absolute path with drive letter
+  EXPECT_TRUE(SplitPath("C:/dir/some_file.txt", &path, &filename, &extension));
+  EXPECT_EQ(path, "C:/dir/");
+  EXPECT_EQ(filename, "some_file");
+  EXPECT_EQ(extension, ".txt");
+
+  // Relative path with drive letter
+  EXPECT_TRUE(SplitPath("C:dir/some_file.txt", &path, &filename, &extension));
+  EXPECT_EQ(path, "C:dir/");
+  EXPECT_EQ(filename, "some_file");
+  EXPECT_EQ(extension, ".txt");
+
+  // Relative path with drive letter and no directory
+  EXPECT_TRUE(SplitPath("C:some_file.txt", &path, &filename, &extension));
+  EXPECT_EQ(path, "C:");
+  EXPECT_EQ(filename, "some_file");
+  EXPECT_EQ(extension, ".txt");
+
+  // Path that is just the drive letter
+  EXPECT_TRUE(SplitPath("C:", &path, &filename, &extension));
+  EXPECT_EQ(path, "C:");
+  EXPECT_EQ(filename, "");
+  EXPECT_EQ(extension, "");
+}
+#endif
+
+TEST(StringUtil, CaseInsensitiveContains_BasicMatches)
+{
+  EXPECT_TRUE(Common::CaseInsensitiveContains("hello world", "hello"));
+  EXPECT_TRUE(Common::CaseInsensitiveContains("hello world", "world"));
+  EXPECT_TRUE(Common::CaseInsensitiveContains("HELLO WORLD", "hello"));
+  EXPECT_TRUE(Common::CaseInsensitiveContains("HeLLo WoRLd", "WORLD"));
+}
+
+TEST(StringUtil, CaseInsensitiveContains_SubstringNotFound)
+{
+  EXPECT_FALSE(Common::CaseInsensitiveContains("hello world", "hey"));
+}
+
+TEST(StringUtil, CaseInsensitiveContains_EmptyStrings)
+{
+  EXPECT_TRUE(Common::CaseInsensitiveContains("", ""));
+  EXPECT_TRUE(Common::CaseInsensitiveContains("hello", ""));
+  EXPECT_FALSE(Common::CaseInsensitiveContains("", "world"));
+}
+
+TEST(StringUtil, CaseInsensitiveContains_EntireStringMatch)
+{
+  EXPECT_TRUE(Common::CaseInsensitiveContains("Test", "TEST"));
+}
+
+TEST(StringUtil, CaseInsensitiveContains_OverlappingMatches)
+{
+  EXPECT_TRUE(Common::CaseInsensitiveContains("aaaaaa", "aa"));
+  EXPECT_TRUE(Common::CaseInsensitiveContains("ababababa", "bABa"));
 }

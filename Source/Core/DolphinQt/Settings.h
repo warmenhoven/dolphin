@@ -1,6 +1,5 @@
 // Copyright 2015 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -8,7 +7,13 @@
 
 #include <QFont>
 #include <QObject>
+#include <QRadioButton>
 #include <QSettings>
+
+#include "Common/Config/Config.h"
+#include "Core/Config/MainSettings.h"
+#include "DiscIO/Enums.h"
+#include "InputCommon/ControllerInterface/ControllerInterface.h"
 
 namespace Core
 {
@@ -26,7 +31,6 @@ class NetPlayClient;
 class NetPlayServer;
 }  // namespace NetPlay
 
-class GameListModel;
 class InputConfig;
 
 // UI settings to be stored in the config directory.
@@ -40,18 +44,42 @@ public:
   Settings(Settings&&) = delete;
   Settings& operator=(Settings&&) = delete;
 
-  ~Settings();
+  ~Settings() override;
+
+  void UnregisterDevicesChangedCallback();
 
   static Settings& Instance();
   static QSettings& GetQSettings();
 
   // UI
-  void SetThemeName(const QString& theme_name);
-  void SetCurrentUserStyle(const QString& stylesheet_name);
-  QString GetCurrentUserStyle() const;
+  void TriggerThemeChanged();
+  void InitDefaultPalette();
+  bool IsSystemDark();
+  bool IsThemeDark();
 
-  void SetUserStylesEnabled(bool enabled);
-  bool AreUserStylesEnabled() const;
+  void SetUserStyleName(const QString& stylesheet_name);
+  QString GetUserStyleName() const;
+
+  enum class StyleType : int
+  {
+    System = 0,
+    Light = 1,
+    Dark = 2,
+    User = 3,
+
+    MinValue = 0,
+    MaxValue = 3,
+  };
+
+  void SetStyleType(StyleType type);
+  StyleType GetStyleType() const;
+
+  // this evaluates the current stylesheet settings and refreshes the GUI with them
+  void ApplyStyle();
+
+  void GetToolTipStyle(QColor& window_color, QColor& text_color, QColor& emphasis_text_color,
+                       QColor& border_color, const QPalette& palette,
+                       const QPalette& high_contrast_palette) const;
 
   bool IsLogVisible() const;
   void SetLogVisible(bool visible);
@@ -73,8 +101,8 @@ public:
   QString GetDefaultGame() const;
   void SetDefaultGame(QString path);
   void RefreshGameList();
+  void NotifyRefreshGameListStarted();
   void NotifyRefreshGameListComplete();
-  void RefreshMetadata();
   void NotifyMetadataRefreshComplete();
   void ReloadTitleDB();
   bool IsAutoRefreshEnabled() const;
@@ -91,11 +119,19 @@ public:
   bool IsUSBKeyboardConnected() const;
   void SetUSBKeyboardConnected(bool connected);
 
+  bool IsWiiSpeakMuted() const;
+  void SetWiiSpeakMuted(bool muted);
+
+  void SetIsContinuouslyFrameStepping(bool is_stepping);
+  bool GetIsContinuouslyFrameStepping() const;
+
   // Graphics
-  void SetHideCursor(bool hide_cursor);
-  bool GetHideCursor() const;
+  Config::ShowCursor GetCursorVisibility() const;
+  bool GetLockCursor() const;
   void SetKeepWindowOnTop(bool top);
   bool IsKeepWindowOnTopEnabled() const;
+  bool GetGraphicModsEnabled() const;
+  void SetGraphicModsEnabled(bool enabled);
 
   // Audio
   int GetVolume() const;
@@ -111,7 +147,6 @@ public:
 
   // Cheats
   bool GetCheatsEnabled() const;
-  void SetCheatsEnabled(bool enabled);
 
   // Debug
   void SetDebugModeEnabled(bool enabled);
@@ -132,6 +167,8 @@ public:
   bool IsNetworkVisible() const;
   void SetJITVisible(bool enabled);
   bool IsJITVisible() const;
+  void SetAssemblerVisible(bool enabled);
+  bool IsAssemblerVisible() const;
   QFont GetDebugFont() const;
   void SetDebugFont(QFont font);
 
@@ -139,12 +176,14 @@ public:
   QString GetAutoUpdateTrack() const;
   void SetAutoUpdateTrack(const QString& mode);
 
+  // Fallback Region
+  DiscIO::Region GetFallbackRegion() const;
+  void SetFallbackRegion(const DiscIO::Region& region);
+
   // Analytics
   bool IsAnalyticsEnabled() const;
   void SetAnalyticsEnabled(bool enabled);
 
-  // Other
-  GameListModel* GetGameListModel() const;
 signals:
   void ConfigChanged();
   void EmulationStateChanged(Core::State new_state);
@@ -153,14 +192,15 @@ signals:
   void PathRemoved(const QString&);
   void DefaultGameChanged(const QString&);
   void GameListRefreshRequested();
+  void GameListRefreshStarted();
   void GameListRefreshCompleted();
   void TitleDBReloadRequested();
   void MetadataRefreshRequested();
   void MetadataRefreshCompleted();
   void AutoRefreshToggled(bool enabled);
-  void HideCursorChanged();
+  void CursorVisibilityChanged();
+  void LockCursorChanged();
   void KeepWindowOnTopChanged(bool top);
-  void VolumeChanged(int volume);
   void NANDRefresh();
   void RegistersVisibilityChanged(bool visible);
   void ThreadsVisibilityChanged(bool visible);
@@ -175,19 +215,29 @@ signals:
   void MemoryVisibilityChanged(bool visible);
   void NetworkVisibilityChanged(bool visible);
   void JITVisibilityChanged(bool visible);
+  void AssemblerVisibilityChanged(bool visible);
   void DebugModeToggled(bool enabled);
-  void DebugFontChanged(QFont font);
+  void DebugFontChanged(const QFont& font);
   void AutoUpdateTrackChanged(const QString& mode);
+  void FallbackRegionChanged(const DiscIO::Region& region);
   void AnalyticsToggled(bool enabled);
+  void ReleaseDevices();
   void DevicesChanged();
   void SDCardInsertionChanged(bool inserted);
   void USBKeyboardConnectionChanged(bool connected);
+  void WiiSpeakMuteChanged(bool muted);
+  void EnableGfxModsChanged(bool enabled);
 
 private:
+  Settings();
+
   bool m_batch = false;
+  std::atomic<bool> m_continuously_frame_stepping = false;
+
   std::shared_ptr<NetPlay::NetPlayClient> m_client;
   std::shared_ptr<NetPlay::NetPlayServer> m_server;
-  Settings();
+  ControllerInterface::HotplugCallbackHandle m_hotplug_callback_handle;
+  Config::ConfigChangedCallbackID m_config_changed_callback_id;
 };
 
 Q_DECLARE_METATYPE(Core::State);

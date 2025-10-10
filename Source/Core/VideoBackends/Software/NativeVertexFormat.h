@@ -1,6 +1,5 @@
 // Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -8,25 +7,17 @@
 #include <cstddef>
 
 #include "Common/CommonTypes.h"
-#include "VideoBackends/Software/Vec3.h"
-
-struct Vec4
-{
-  float x;
-  float y;
-  float z;
-  float w;
-};
+#include "Common/Matrix.h"
 
 struct InputVertexData
 {
   u8 posMtx;
   std::array<u8, 8> texMtx;
 
-  Vec3 position;
-  std::array<Vec3, 3> normal;
+  Common::Vec3 position;
+  std::array<Common::Vec3, 3> normal;
   std::array<std::array<u8, 4>, 2> color;
-  std::array<std::array<float, 2>, 8> texCoords;
+  std::array<Common::Vec2, 8> texCoords;
 };
 
 struct OutputVertexData
@@ -40,12 +31,12 @@ struct OutputVertexData
     ALP_C
   };
 
-  Vec3 mvPosition = {};
-  Vec4 projectedPosition = {};
-  Vec3 screenPosition = {};
-  std::array<Vec3, 3> normal{};
+  Common::Vec3 mvPosition = {};
+  Common::Vec4 projectedPosition = {};
+  Common::Vec3 screenPosition = {};
+  std::array<Common::Vec3, 3> normal{};
   std::array<std::array<u8, 4>, 2> color{};
-  std::array<Vec3, 8> texCoords{};
+  std::array<Common::Vec3, 8> texCoords{};
 
   void Lerp(float t, const OutputVertexData* a, const OutputVertexData* b)
   {

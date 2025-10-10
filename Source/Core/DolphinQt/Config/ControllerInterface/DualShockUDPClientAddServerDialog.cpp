@@ -1,12 +1,10 @@
 // Copyright 2020 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/Config/ControllerInterface/DualShockUDPClientAddServerDialog.h"
 
 #include <fmt/format.h>
 
-#include <QButtonGroup>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QGridLayout>
@@ -31,7 +29,6 @@ DualShockUDPClientAddServerDialog::DualShockUDPClientAddServerDialog(QWidget* pa
 void DualShockUDPClientAddServerDialog::CreateWidgets()
 {
   setWindowTitle(tr("Add New DSU Server"));
-  setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
   m_main_layout = new QGridLayout;
 

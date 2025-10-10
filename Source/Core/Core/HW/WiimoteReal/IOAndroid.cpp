@@ -1,6 +1,7 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "Core/HW/WiimoteReal/IOAndroid.h"
 
 #include <jni.h>
 
@@ -11,8 +12,6 @@
 #include "Common/StringUtil.h"
 #include "Common/Thread.h"
 #include "Common/Timer.h"
-
-#include "Core/HW/WiimoteReal/IOAndroid.h"
 
 #include "jni/AndroidCommon/IDCache.h"
 
@@ -27,12 +26,12 @@ void WiimoteScannerAndroid::FindWiimotes(std::vector<Wiimote*>& found_wiimotes,
   found_wiimotes.clear();
   found_board = nullptr;
 
-  NOTICE_LOG(WIIMOTE, "Finding Wiimotes");
+  NOTICE_LOG_FMT(WIIMOTE, "Finding Wiimotes");
 
   JNIEnv* env = IDCache::GetEnvForThread();
 
-  jmethodID openadapter_func = env->GetStaticMethodID(s_adapter_class, "OpenAdapter", "()Z");
-  jmethodID queryadapter_func = env->GetStaticMethodID(s_adapter_class, "QueryAdapter", "()Z");
+  jmethodID openadapter_func = env->GetStaticMethodID(s_adapter_class, "openAdapter", "()Z");
+  jmethodID queryadapter_func = env->GetStaticMethodID(s_adapter_class, "queryAdapter", "()Z");
 
   if (env->CallStaticBooleanMethod(s_adapter_class, queryadapter_func) &&
       env->CallStaticBooleanMethod(s_adapter_class, openadapter_func))
@@ -56,15 +55,15 @@ bool WiimoteAndroid::ConnectInternal()
 {
   m_env = IDCache::GetEnvForThread();
 
-  jfieldID payload_field = m_env->GetStaticFieldID(s_adapter_class, "wiimote_payload", "[[B");
+  jfieldID payload_field = m_env->GetStaticFieldID(s_adapter_class, "wiimotePayload", "[[B");
   jobjectArray payload_object =
       reinterpret_cast<jobjectArray>(m_env->GetStaticObjectField(s_adapter_class, payload_field));
   m_java_wiimote_payload =
       (jbyteArray)m_env->GetObjectArrayElement(payload_object, m_mayflash_index);
 
   // Get function pointers
-  m_input_func = m_env->GetStaticMethodID(s_adapter_class, "Input", "(I)I");
-  m_output_func = m_env->GetStaticMethodID(s_adapter_class, "Output", "(I[BI)I");
+  m_input_func = m_env->GetStaticMethodID(s_adapter_class, "input", "(I)I");
+  m_output_func = m_env->GetStaticMethodID(s_adapter_class, "output", "(I[BI)I");
 
   is_connected = true;
 
@@ -111,7 +110,7 @@ int WiimoteAndroid::IOWrite(u8 const* buf, size_t len)
 void InitAdapterClass()
 {
   JNIEnv* env = IDCache::GetEnvForThread();
-  jclass adapter_class = env->FindClass("org/dolphinemu/dolphinemu/utils/Java_WiimoteAdapter");
+  jclass adapter_class = env->FindClass("org/dolphinemu/dolphinemu/utils/WiimoteAdapter");
   s_adapter_class = reinterpret_cast<jclass>(env->NewGlobalRef(adapter_class));
 }
 }  // namespace WiimoteReal

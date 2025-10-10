@@ -1,6 +1,5 @@
 // Copyright 2020 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/NKitWarningDialog.h"
 
@@ -21,14 +20,14 @@ bool NKitWarningDialog::ShowUnlessDisabled(QWidget* parent)
 {
   if (Config::Get(Config::MAIN_SKIP_NKIT_WARNING))
     return true;
-  else
-    return NKitWarningDialog(parent).exec() == QDialog::Accepted;
+
+  NKitWarningDialog dialog(parent);
+  return dialog.exec() == QDialog::Accepted;
 }
 
 NKitWarningDialog::NKitWarningDialog(QWidget* parent) : QDialog(parent)
 {
   setWindowTitle(tr("NKit Warning"));
-  setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
   setWindowIcon(Resources::GetAppIcon());
 
   QVBoxLayout* main_layout = new QVBoxLayout;
@@ -41,10 +40,10 @@ NKitWarningDialog::NKitWarningDialog(QWidget* parent) : QDialog(parent)
          "• You can't use NetPlay with people who have normal disc images\n"
          "• Input recordings are not compatible between NKit disc images and normal disc images\n"
          "• Savestates are not compatible between NKit disc images and normal disc images\n"
-         "• Some games crash, such as Super Paper Mario\n"
+         "• Some games can crash, such as Super Paper Mario and Metal Gear Solid: The Twin Snakes\n"
          "• Wii games don't work at all in older versions of Dolphin and in many other programs\n"
          "\n"
-         "Are you sure you want to continue anyway?\n"));
+         "Are you sure you want to continue anyway?"));
   warning->setWordWrap(true);
   main_layout->addWidget(warning);
 
@@ -78,8 +77,13 @@ NKitWarningDialog::NKitWarningDialog(QWidget* parent) : QDialog(parent)
   connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
 
   ok->setEnabled(false);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+  connect(checkbox_accept, &QCheckBox::checkStateChanged,
+          [ok](Qt::CheckState state) { ok->setEnabled(state == Qt::Checked); });
+#else
   connect(checkbox_accept, &QCheckBox::stateChanged,
           [ok](int state) { ok->setEnabled(state == Qt::Checked); });
+#endif
 
   connect(this, &QDialog::accepted, [checkbox_skip] {
     Config::SetBase(Config::MAIN_SKIP_NKIT_WARNING, checkbox_skip->isChecked());

@@ -1,6 +1,5 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -20,7 +19,7 @@ namespace DiscIO
 class VolumeDisc;
 struct Partition;
 
-class FileInfoGCWii : public FileInfo
+class FileInfoGCWii final : public FileInfo
 {
 public:
   // None of the constructors take ownership of FST pointers
@@ -42,6 +41,7 @@ public:
 
   u64 GetOffset() const override;
   u32 GetSize() const override;
+  bool IsRoot() const override;
   bool IsDirectory() const override;
   u32 GetTotalChildren() const override;
   std::string GetName() const override;
@@ -84,7 +84,7 @@ private:
   u32 m_total_file_infos;
 };
 
-class FileSystemGCWii : public FileSystem
+class FileSystemGCWii final : public FileSystem
 {
 public:
   FileSystemGCWii(const VolumeDisc* volume, const Partition& partition);

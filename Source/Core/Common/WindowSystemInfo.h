@@ -1,6 +1,5 @@
 // Copyright 2018 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -13,7 +12,7 @@ enum class WindowSystemType
   X11,
   Wayland,
   FBDev,
-  Libretro,
+  Haiku,
 };
 
 struct WindowSystemInfo
@@ -38,7 +37,7 @@ struct WindowSystemInfo
   void* render_window = nullptr;
 
   // Render surface. Depending on the host platform, this may differ from the window.
-  // This is kept seperate as input may require a different handle to rendering, and
+  // This is kept separate as input may require a different handle to rendering, and
   // during video backend startup the surface pointer may change (MoltenVK).
   void* render_surface = nullptr;
 
