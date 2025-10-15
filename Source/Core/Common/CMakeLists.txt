@@ -1,14 +1,24 @@
 add_library(common
   Analytics.cpp
   Analytics.h
+  Assembler/AssemblerShared.cpp
+  Assembler/AssemblerShared.h
+  Assembler/AssemblerTables.cpp
+  Assembler/AssemblerTables.h
+  Assembler/GekkoAssembler.cpp
+  Assembler/GekkoAssembler.h
+  Assembler/GekkoIRGen.cpp
+  Assembler/GekkoIRGen.h
+  Assembler/GekkoLexer.cpp
+  Assembler/GekkoLexer.h
+  Assembler/GekkoParser.cpp
+  Assembler/GekkoParser.h
   Assert.h
-  Atomic.h
   BitField.h
   BitSet.h
   BitUtils.h
   BlockingLoop.h
-  CDUtils.cpp
-  CDUtils.h
+  Buffer.h
   ChunkFile.h
   CodeBlock.h
   ColorUtil.cpp
@@ -25,6 +35,7 @@ add_library(common
   Config/Enums.h
   Config/Layer.cpp
   Config/Layer.h
+  Contains.h
   CPUDetect.h
   Crypto/AES.cpp
   Crypto/AES.h
@@ -32,34 +43,45 @@ add_library(common
   Crypto/bn.h
   Crypto/ec.cpp
   Crypto/ec.h
+  Crypto/HMAC.cpp
+  Crypto/HMAC.h
+  Crypto/SHA1.cpp
+  Crypto/SHA1.h
   Debug/MemoryPatches.cpp
   Debug/MemoryPatches.h
-  Debug/OSThread.cpp
-  Debug/OSThread.h
   Debug/Threads.h
   Debug/Watches.cpp
   Debug/Watches.h
-  DebugInterface.h
   DynamicLibrary.cpp
   DynamicLibrary.h
-  ENetUtil.cpp
-  ENetUtil.h
+  ENet.cpp
+  ENet.h
+  EnumFormatter.h
+  EnumMap.h
+  EnumUtils.h
   Event.h
-  File.cpp
-  File.h
+  FatFsUtil.cpp
+  FatFsUtil.h
   FileSearch.cpp
   FileSearch.h
+  FilesystemWatcher.cpp
+  FilesystemWatcher.h
   FileUtil.cpp
   FileUtil.h
   FixedSizeQueue.h
   Flag.h
   FloatUtils.cpp
   FloatUtils.h
+  Functional.h
+  FormatUtil.h
   FPURoundMode.h
   GekkoDisassembler.cpp
   GekkoDisassembler.h
   Hash.cpp
   Hash.h
+  HookableEvent.h
+  HostDisassembler.cpp
+  HostDisassembler.h
   HttpRequest.cpp
   HttpRequest.h
   Image.cpp
@@ -67,21 +89,22 @@ add_library(common
   IniFile.cpp
   IniFile.h
   Inline.h
+  IOFile.cpp
+  IOFile.h
   JitRegister.cpp
   JitRegister.h
+  JsonUtil.h
+  JsonUtil.cpp
   Lazy.h
   LinearDiskCache.h
+  UnixUtil.h
   Logging/ConsoleListener.h
   Logging/Log.h
   Logging/LogManager.cpp
   Logging/LogManager.h
-  MathUtil.cpp
   MathUtil.h
   Matrix.cpp
   Matrix.h
-  MD5.cpp
-  MD5.h
-  MemArena.cpp
   MemArena.h
   MemoryUtil.cpp
   MemoryUtil.h
@@ -94,10 +117,9 @@ add_library(common
   Network.h
   PcapFile.cpp
   PcapFile.h
-  PerformanceCounter.cpp
-  PerformanceCounter.h
   Profiler.cpp
   Profiler.h
+  Projection.h
   QoSSession.cpp
   QoSSession.h
   Random.cpp
@@ -107,11 +129,16 @@ add_library(common
   SDCardUtil.cpp
   SDCardUtil.h
   Semaphore.h
-  SFMLHelper.cpp
-  SFMLHelper.h
   SettingsHandler.cpp
   SettingsHandler.h
+  SFMLHelper.cpp
+  SFMLHelper.h
+  SmallVector.h
+  SocketContext.cpp
+  SocketContext.h
+  SpanUtils.h
   SPSCQueue.h
+  StringLiteral.h
   StringUtil.cpp
   StringUtil.h
   SymbolDB.cpp
@@ -120,32 +147,54 @@ add_library(common
   Thread.h
   Timer.cpp
   Timer.h
+  TimeUtil.cpp
+  TimeUtil.h
   TraversalClient.cpp
   TraversalClient.h
   TraversalProto.h
+  TypeUtils.h
+  Unreachable.h
   UPnP.cpp
   UPnP.h
   VariantUtil.h
   Version.cpp
   Version.h
+  WaitableFlag.h
   WindowSystemInfo.h
   WorkQueueThread.h
 )
 
+add_dependencies(common dolphin_scmrev)
+
+if(NOT MSVC AND _M_ARM_64)
+  set_source_files_properties(
+    Crypto/AES.cpp
+    Crypto/SHA1.cpp
+    PROPERTIES COMPILE_FLAGS "-march=armv8-a+crypto")
+endif()
+
 target_link_libraries(common
 PUBLIC
   ${CMAKE_THREAD_LIBS_INIT}
-  enet
+  enet::enet
   fmt::fmt
-  ${MBEDTLS_LIBRARIES}
-  minizip
+  MbedTLS::mbedtls
+  minizip-ng::minizip-ng
+  sfml-network
 
 PRIVATE
-  ${CURL_LIBRARIES}
-  ${ICONV_LIBRARIES}
-  png
+  CURL::libcurl
+  FatFs
+  Iconv::Iconv
+  spng::spng
+  $<$<NOT:$<BOOL:${IOS}>>:watcher>
   ${VTUNE_LIBRARIES}
 )
+
+if ((DEFINED CMAKE_ANDROID_ARCH_ABI AND CMAKE_ANDROID_ARCH_ABI MATCHES "x86|x86_64") OR
+    (NOT DEFINED CMAKE_ANDROID_ARCH_ABI AND _M_X86_64))
+  target_link_libraries(common PRIVATE bdisasm)
+endif()
 
 if (APPLE)
   target_link_libraries(common
@@ -162,8 +211,15 @@ elseif(WIN32)
     winmm.lib
   )
   if (_M_X86_64)
-	  target_link_libraries(common PRIVATE opengl32.lib)
+    target_link_libraries(common PRIVATE opengl32.lib)
   endif()
+elseif (ANDROID)
+  target_link_libraries(common
+  PRIVATE
+    androidcommon
+  )
+elseif(HAIKU)
+  target_link_libraries(common PRIVATE be GL)
 endif()
 
 if(ANDROID)
@@ -171,6 +227,7 @@ if(ANDROID)
     AndroidAnalytics.cpp
     AndroidAnalytics.h
     Logging/ConsoleListenerDroid.cpp
+    MemArenaAndroid.cpp
   )
 elseif(WIN32)
   if(MSVC)
@@ -181,10 +238,24 @@ elseif(WIN32)
   endif()
   target_sources(common PRIVATE
     Logging/ConsoleListenerWin.cpp
+    MemArenaWin.cpp
+  )
+elseif(IOS)
+  target_sources(common PRIVATE
+    Logging/ConsoleListenerNix.cpp
+    JITMemoryTracker.h
+    JITMemoryTracker.cpp
+    MemArenaDarwin.cpp
+  )
+elseif(APPLE)
+  target_sources(common PRIVATE
+    Logging/ConsoleListenerNix.cpp
+    MemArenaDarwin.cpp
   )
 else()
   target_sources(common PRIVATE
     Logging/ConsoleListenerNix.cpp
+    MemArenaUnix.cpp
   )
 endif()
 
@@ -194,10 +265,10 @@ if(_M_ARM_64)
     Arm64Emitter.h
     ArmCommon.h
     ArmCPUDetect.cpp
-    GenericFPURoundMode.cpp
+    ArmFPURoundMode.cpp
   )
 else()
-  if(_M_X86) #X86
+  if(_M_X86_64) #X86
     target_sources(common PRIVATE
       x64ABI.cpp
       x64ABI.h
@@ -249,16 +320,24 @@ if(WIN32)
   target_sources(common PRIVATE
     GL/GLInterface/WGL.cpp
     GL/GLInterface/WGL.h
+    WindowsDevice.cpp
+    WindowsDevice.h
+    WindowsRegistry.cpp
   )
   if(MSVC)
     target_sources(common PRIVATE
       CompatPatches.cpp
     )
   endif()
-elseif(APPLE)
+elseif(APPLE AND NOT LIBRETRO)
   target_sources(common PRIVATE
     GL/GLInterface/AGL.h
     GL/GLInterface/AGL.mm
+  )
+elseif(HAIKU)
+  target_sources(common PRIVATE
+    GL/GLInterface/BGL.h
+    GL/GLInterface/BGL.cpp
   )
 elseif(ENABLE_X11 AND X11_FOUND)
   target_sources(common PRIVATE
@@ -277,6 +356,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_link_libraries(common PUBLIC dl rt)
 endif()
 
+if(WIN32)
+  target_sources(common PRIVATE HRWrap.h HRWrap.cpp)
+endif()
+
 if(USE_UPNP)
   target_link_libraries(common PRIVATE Miniupnpc::miniupnpc)
 endif()
@@ -285,19 +368,56 @@ if(OPROFILE_FOUND)
   target_link_libraries(common PRIVATE OProfile::OProfile)
 endif()
 
+if(ENABLE_LLVM)
+  find_package(LLVM CONFIG)
+  if(LLVM_FOUND)
+    message(STATUS "LLVM found, enabling LLVM support in disassembler")
+    target_compile_definitions(common PRIVATE HAVE_LLVM)
+    # Minimal documentation about LLVM's CMake functions is available here:
+    # https://releases.llvm.org/16.0.0/docs/CMake.html#embedding-llvm-in-your-project
+    # https://groups.google.com/g/llvm-dev/c/YeEVe7HTasQ?pli=1
+    #
+    # However, you have to read the source code in any case.
+    # Look for LLVM-Config.cmake in your (Unix) system:
+    # $ find /usr -name LLVM-Config\\.cmake 2>/dev/null
+    llvm_expand_pseudo_components(LLVM_EXPAND_COMPONENTS
+      AllTargetsInfos AllTargetsDisassemblers AllTargetsCodeGens
+    )
+    llvm_config(common USE_SHARED
+      mcdisassembler target ${LLVM_EXPAND_COMPONENTS}
+    )
+    target_include_directories(common PRIVATE ${LLVM_INCLUDE_DIRS})
+  endif()
+endif()
+
 if(UNIX AND NOT LIBRETRO)
   # Posix networking code needs to be fixed for Windows
   add_executable(traversal_server TraversalServer.cpp)
-  target_link_libraries(traversal_server PRIVATE common)
+  target_link_libraries(traversal_server PRIVATE common fmt::fmt)
   if(SYSTEMD_FOUND)
     target_link_libraries(traversal_server PRIVATE ${SYSTEMD_LIBRARIES})
   endif()
-elseif(WIN32)
-  if(MSVC)
-    target_link_libraries(common PRIVATE "-INCLUDE:enableCompatPatches")
-    target_link_libraries(common PRIVATE "-NODEFAULTLIB:libcmt")
-  endif()
-  if(MINGW)
-    target_link_libraries(common PRIVATE comctl32 comdlg32 winmm shlwapi)
-  endif()
+  elseif(WIN32 AND NOT LIBRETRO)
+  find_package(PowerShell REQUIRED)
+  execute_process(
+    COMMAND ${POWERSHELL_EXE} -Command "[System.Diagnostics.FileVersionInfo]::GetVersionInfo('$ENV{VCToolsRedistDir}vc_redist.x64.exe').ProductVersion"
+    OUTPUT_VARIABLE VC_TOOLS_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+  configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/build_info.txt.in"
+    "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/build_info.txt"
+    )
+
+  target_link_libraries(common PRIVATE "-INCLUDE:enableCompatPatches")
+endif()
+
+if(MSVC)
+  # Add precompiled header
+  target_link_libraries(common PRIVATE use_pch)
+endif()
+
+if(LIBRETRO)
+  target_include_directories(common PRIVATE ${CMAKE_SOURCE_DIR}/Externals/Libretro/Include)
+  target_link_libraries(common PRIVATE dolphin_libretro_videocontexts)
 endif()

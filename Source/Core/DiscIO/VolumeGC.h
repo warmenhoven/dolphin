@@ -1,6 +1,5 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -26,15 +25,16 @@ enum class Language;
 enum class Region;
 enum class Platform;
 
-class VolumeGC : public VolumeDisc
+class VolumeGC final : public VolumeDisc
 {
 public:
   VolumeGC(std::unique_ptr<BlobReader> reader);
-  ~VolumeGC();
+  ~VolumeGC() override;
   bool Read(u64 offset, u64 length, u8* buffer,
             const Partition& partition = PARTITION_NONE) const override;
   const FileSystem* GetFileSystem(const Partition& partition = PARTITION_NONE) const override;
   std::string GetGameTDBID(const Partition& partition = PARTITION_NONE) const override;
+  std::string GetTriforceID() const override;
   std::map<Language, std::string> GetShortNames() const override;
   std::map<Language, std::string> GetLongNames() const override;
   std::map<Language, std::string> GetShortMakers() const override;
@@ -46,14 +46,16 @@ public:
   bool IsDatelDisc() const override;
   Region GetRegion() const override;
   BlobType GetBlobType() const override;
-  u64 GetSize() const override;
-  bool IsSizeAccurate() const override;
+  u64 GetDataSize() const override;
+  DataSizeType GetDataSizeType() const override;
   u64 GetRawSize() const override;
   const BlobReader& GetBlobReader() const override;
 
+  std::array<u8, 20> GetSyncHash() const override;
+
 private:
-  static const u32 GC_BANNER_WIDTH = 96;
-  static const u32 GC_BANNER_HEIGHT = 32;
+  static constexpr u32 GC_BANNER_WIDTH = 96;
+  static constexpr u32 GC_BANNER_HEIGHT = 32;
 
   struct GCBannerInformation
   {
@@ -75,6 +77,13 @@ private:
                                                     // (only one for BNR1 type)
   };
 
+  struct BootID
+  {
+    u32 magic;  // "BTID"
+    u32 padding[11];
+    std::array<char, 4> id;
+  };
+
   struct ConvertedGCBanner
   {
     ConvertedGCBanner();
@@ -94,14 +103,17 @@ private:
   ConvertedGCBanner LoadBannerFile() const;
   ConvertedGCBanner ExtractBannerInformation(const GCBanner& banner_file, bool is_bnr1) const;
 
-  static const size_t BNR1_SIZE = sizeof(GCBanner) - sizeof(GCBannerInformation) * 5;
-  static const size_t BNR2_SIZE = sizeof(GCBanner);
+  static constexpr size_t BNR1_SIZE = sizeof(GCBanner) - sizeof(GCBannerInformation) * 5;
+  static constexpr size_t BNR2_SIZE = sizeof(GCBanner);
 
   Common::Lazy<ConvertedGCBanner> m_converted_banner;
 
   Common::Lazy<std::unique_ptr<FileSystem>> m_file_system;
 
   std::unique_ptr<BlobReader> m_reader;
+
+  bool m_is_triforce;
+  std::array<char, 4> m_triforce_id;
 };
 
 }  // namespace DiscIO

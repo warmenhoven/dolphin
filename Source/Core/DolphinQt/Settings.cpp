@@ -1,29 +1,42 @@
 // Copyright 2015 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/Settings.h"
 
+#include <atomic>
+#include <memory>
+
 #include <QApplication>
+#include <QColor>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFontDatabase>
+#include <QPalette>
+#include <QRadioButton>
 #include <QSize>
+#include <QStyle>
+#include <QStyleHints>
+#include <QWidget>
 
 #include "AudioCommon/AudioCommon.h"
 
 #include "Common/Config/Config.h"
+#include "Common/Contains.h"
 #include "Common/FileUtil.h"
 #include "Common/StringUtil.h"
 
+#include "Core/AchievementManager.h"
+#include "Core/Config/GraphicsSettings.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/IOS/IOS.h"
 #include "Core/NetPlayClient.h"
 #include "Core/NetPlayServer.h"
+#include "Core/System.h"
 
-#include "DolphinQt/GameList/GameListModel.h"
+#include "DolphinQt/Host.h"
 #include "DolphinQt/QtUtils/QueueOnObject.h"
 
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
@@ -31,25 +44,65 @@
 
 #include "VideoCommon/NetPlayChatUI.h"
 #include "VideoCommon/NetPlayGolfUI.h"
-#include "VideoCommon/RenderBase.h"
+
+static std::unique_ptr<QPalette> s_default_palette;
 
 Settings::Settings()
 {
   qRegisterMetaType<Core::State>();
-  Core::SetOnStateChangedCallback([this](Core::State new_state) {
-    QueueOnObject(this, [this, new_state] { emit EmulationStateChanged(new_state); });
+  Core::AddOnStateChangedCallback([this](Core::State new_state) {
+    QueueOnObject(this, [this, new_state] {
+      // Avoid signal spam while continuously frame stepping. Will still send a signal for the first
+      // and last framestep.
+      if (!m_continuously_frame_stepping)
+        emit EmulationStateChanged(new_state);
+    });
   });
 
-  Config::AddConfigChangedCallback(
-      [this] { QueueOnObject(this, [this] { emit ConfigChanged(); }); });
+  m_config_changed_callback_id = Config::AddConfigChangedCallback([this] {
+    static std::atomic<bool> do_once{true};
+    if (do_once.exchange(false))
+    {
+      // Calling ConfigChanged() with a "delay" can have risks, for example, if from
+      // code we change some configs that result in Qt greying out some setting, we could
+      // end up editing that setting before its greyed out, sending out an event,
+      // which might not be expected or handled by the code, potentially crashing.
+      // The only safe option would be to wait on the Qt thread to have finished executing this.
+      QueueOnObject(this, [this] {
+        do_once = true;
+        emit ConfigChanged();
+      });
+    }
+  });
 
-  g_controller_interface.RegisterDevicesChangedCallback(
-      [this] { QueueOnObject(this, [this] { emit DevicesChanged(); }); });
+  m_hotplug_callback_handle = g_controller_interface.RegisterDevicesChangedCallback([this] {
+    if (Core::IsHostThread())
+    {
+      emit DevicesChanged();
+    }
+    else
+    {
+      // Any device shared_ptr in the host thread needs to be released immediately as otherwise
+      // they'd continue living until the queued event has run, but some devices can't be recreated
+      // until they are destroyed.
+      // This is safe from any thread. Devices will be refreshed and re-acquired and in
+      // DevicesChanged(). Calling it without queueing shouldn't cause any deadlocks but is slow.
+      emit ReleaseDevices();
 
-  SetCurrentUserStyle(GetCurrentUserStyle());
+      QueueOnObject(this, [this] { emit DevicesChanged(); });
+    }
+  });
 }
 
-Settings::~Settings() = default;
+Settings::~Settings()
+{
+  Config::RemoveConfigChangedCallback(m_config_changed_callback_id);
+}
+
+void Settings::UnregisterDevicesChangedCallback()
+{
+  g_controller_interface.UnregisterDevicesChangedCallback(m_hotplug_callback_handle);
+}
 
 Settings& Settings::Instance()
 {
@@ -65,13 +118,12 @@ QSettings& Settings::GetQSettings()
   return settings;
 }
 
-void Settings::SetThemeName(const QString& theme_name)
+void Settings::TriggerThemeChanged()
 {
-  SConfig::GetInstance().theme_name = theme_name.toStdString();
   emit ThemeChanged();
 }
 
-QString Settings::GetCurrentUserStyle() const
+QString Settings::GetUserStyleName() const
 {
   if (GetQSettings().contains(QStringLiteral("userstyle/name")))
     return GetQSettings().value(QStringLiteral("userstyle/name")).toString();
@@ -80,11 +132,39 @@ QString Settings::GetCurrentUserStyle() const
   return QFileInfo(GetQSettings().value(QStringLiteral("userstyle/path")).toString()).fileName();
 }
 
-void Settings::SetCurrentUserStyle(const QString& stylesheet_name)
+void Settings::SetUserStyleName(const QString& stylesheet_name)
 {
+  GetQSettings().setValue(QStringLiteral("userstyle/name"), stylesheet_name);
+}
+
+void Settings::InitDefaultPalette()
+{
+  s_default_palette = std::make_unique<QPalette>(qApp->palette());
+}
+
+bool Settings::IsSystemDark()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+  return (qApp->styleHints()->colorScheme() == Qt::ColorScheme::Dark);
+#else
+  return false;
+#endif
+}
+
+bool Settings::IsThemeDark()
+{
+  return qApp->palette().color(QPalette::Base).valueF() < 0.5;
+}
+
+// Calling this before the main window has been created breaks the style of some widgets.
+void Settings::ApplyStyle()
+{
+  const StyleType style_type = GetStyleType();
+  const QString stylesheet_name = GetUserStyleName();
   QString stylesheet_contents;
 
-  if (!stylesheet_name.isEmpty() && AreUserStylesEnabled())
+  // If we haven't found one, we continue with an empty (default) style
+  if (!stylesheet_name.isEmpty() && style_type == StyleType::User)
   {
     // Load custom user stylesheet
     QDir directory = QDir(QString::fromStdString(File::GetUserPath(D_STYLES_IDX)));
@@ -94,25 +174,123 @@ void Settings::SetCurrentUserStyle(const QString& stylesheet_name)
       stylesheet_contents = QString::fromUtf8(stylesheet.readAll().data());
   }
 
+#ifdef _WIN32
+  // Unlike other OSes we don't automatically get a default dark theme on Windows.
+  // We manually load a dark palette for our included "(Dark)" style,
+  //  and for *any* external style when the system is in "Dark" mode.
+  // Unfortunately it doesn't seem trivial to load a palette based on the stylesheet itself.
+  if (style_type == StyleType::Dark || (style_type != StyleType::Light && IsSystemDark()))
+  {
+    if (stylesheet_contents.isEmpty())
+    {
+      QFile file(QStringLiteral(":/dolphin_dark_win/dark.qss"));
+      if (file.open(QFile::ReadOnly))
+        stylesheet_contents = QString::fromUtf8(file.readAll().data());
+    }
+
+    QPalette palette = qApp->style()->standardPalette();
+    palette.setColor(QPalette::Window, QColor(32, 32, 32));
+    palette.setColor(QPalette::WindowText, QColor(220, 220, 220));
+    palette.setColor(QPalette::Base, QColor(32, 32, 32));
+    palette.setColor(QPalette::AlternateBase, QColor(48, 48, 48));
+    palette.setColor(QPalette::PlaceholderText, QColor(126, 126, 126));
+    palette.setColor(QPalette::Text, QColor(220, 220, 220));
+    palette.setColor(QPalette::Button, QColor(48, 48, 48));
+    palette.setColor(QPalette::ButtonText, QColor(220, 220, 220));
+    palette.setColor(QPalette::BrightText, QColor(255, 255, 255));
+    palette.setColor(QPalette::Highlight, QColor(0, 120, 215));
+    palette.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
+    palette.setColor(QPalette::Link, QColor(100, 160, 220));
+    palette.setColor(QPalette::LinkVisited, QColor(100, 160, 220));
+    qApp->setPalette(palette);
+  }
+  else
+  {
+    // reset any palette changes that may exist from a previously set dark mode
+    if (s_default_palette)
+      qApp->setPalette(*s_default_palette);
+  }
+#endif
+
+  // Define tooltips style if not already defined
+  if (!stylesheet_contents.contains(QStringLiteral("QToolTip"), Qt::CaseSensitive))
+  {
+    const QPalette& palette = qApp->palette();
+    QColor window_color;
+    QColor text_color;
+    QColor unused_text_emphasis_color;
+    QColor border_color;
+    GetToolTipStyle(window_color, text_color, unused_text_emphasis_color, border_color, palette,
+                    palette);
+
+    const auto tooltip_stylesheet =
+        QStringLiteral("QToolTip { background-color: #%1; color: #%2; padding: 8px; "
+                       "border: 1px; border-style: solid; border-color: #%3; }")
+            .arg(window_color.rgba(), 0, 16)
+            .arg(text_color.rgba(), 0, 16)
+            .arg(border_color.rgba(), 0, 16);
+    stylesheet_contents.append(QStringLiteral("%1").arg(tooltip_stylesheet));
+  }
+
   qApp->setStyleSheet(stylesheet_contents);
-
-  GetQSettings().setValue(QStringLiteral("userstyle/name"), stylesheet_name);
 }
 
-bool Settings::AreUserStylesEnabled() const
+Settings::StyleType Settings::GetStyleType() const
 {
-  return GetQSettings().value(QStringLiteral("userstyle/enabled"), false).toBool();
+  if (GetQSettings().contains(QStringLiteral("userstyle/styletype")))
+  {
+    bool ok = false;
+    const int type_int = GetQSettings().value(QStringLiteral("userstyle/styletype")).toInt(&ok);
+    if (ok && type_int >= static_cast<int>(StyleType::MinValue) &&
+        type_int <= static_cast<int>(StyleType::MaxValue))
+    {
+      return static_cast<StyleType>(type_int);
+    }
+  }
+
+  // if the style type is unset or invalid, try the old enabled flag instead
+  const bool enabled = GetQSettings().value(QStringLiteral("userstyle/enabled"), false).toBool();
+  return enabled ? StyleType::User : StyleType::System;
 }
 
-void Settings::SetUserStylesEnabled(bool enabled)
+void Settings::SetStyleType(StyleType type)
 {
-  GetQSettings().setValue(QStringLiteral("userstyle/enabled"), enabled);
+  GetQSettings().setValue(QStringLiteral("userstyle/styletype"), static_cast<int>(type));
+
+  // also set the old setting so that the config is correctly intepreted by older Dolphin builds
+  GetQSettings().setValue(QStringLiteral("userstyle/enabled"), type == StyleType::User);
+}
+
+void Settings::GetToolTipStyle(QColor& window_color, QColor& text_color,
+                               QColor& emphasis_text_color, QColor& border_color,
+                               const QPalette& palette, const QPalette& high_contrast_palette) const
+{
+  const auto theme_window_color = palette.color(QPalette::Base);
+  const auto theme_window_hsv = theme_window_color.toHsv();
+  const auto brightness = theme_window_hsv.value();
+  const bool brightness_over_threshold = brightness > 128;
+  const QColor emphasis_text_color_1 = Qt::yellow;
+  const QColor emphasis_text_color_2 = QColor(QStringLiteral("#0090ff"));  // ~light blue
+  if (Config::Get(Config::MAIN_USE_HIGH_CONTRAST_TOOLTIPS))
+  {
+    window_color = brightness_over_threshold ? QColor(72, 72, 72) : Qt::white;
+    text_color = brightness_over_threshold ? Qt::white : Qt::black;
+    emphasis_text_color = brightness_over_threshold ? emphasis_text_color_1 : emphasis_text_color_2;
+    border_color = high_contrast_palette.color(QPalette::Window).darker(160);
+  }
+  else
+  {
+    window_color = palette.color(QPalette::Window);
+    text_color = palette.color(QPalette::Text);
+    emphasis_text_color = brightness_over_threshold ? emphasis_text_color_2 : emphasis_text_color_1;
+    border_color = palette.color(QPalette::Text);
+  }
 }
 
 QStringList Settings::GetPaths() const
 {
   QStringList list;
-  for (const auto& path : SConfig::GetInstance().m_ISOFolder)
+  for (const auto& path : Config::GetIsoPaths())
     list << QString::fromStdString(path);
   return list;
 }
@@ -120,25 +298,25 @@ QStringList Settings::GetPaths() const
 void Settings::AddPath(const QString& qpath)
 {
   std::string path = qpath.toStdString();
+  std::vector<std::string> paths = Config::GetIsoPaths();
 
-  std::vector<std::string>& paths = SConfig::GetInstance().m_ISOFolder;
-  if (std::find(paths.begin(), paths.end(), path) != paths.end())
+  if (Common::Contains(paths, path))
     return;
 
   paths.emplace_back(path);
+  Config::SetIsoPaths(paths);
   emit PathAdded(qpath);
 }
 
 void Settings::RemovePath(const QString& qpath)
 {
   std::string path = qpath.toStdString();
-  std::vector<std::string>& paths = SConfig::GetInstance().m_ISOFolder;
+  std::vector<std::string> paths = Config::GetIsoPaths();
 
-  auto new_end = std::remove(paths.begin(), paths.end(), path);
-  if (new_end == paths.end())
+  if (std::erase(paths, path) == 0)
     return;
 
-  paths.erase(new_end, paths.end());
+  Config::SetIsoPaths(paths);
   emit PathRemoved(qpath);
 }
 
@@ -147,14 +325,14 @@ void Settings::RefreshGameList()
   emit GameListRefreshRequested();
 }
 
+void Settings::NotifyRefreshGameListStarted()
+{
+  emit GameListRefreshStarted();
+}
+
 void Settings::NotifyRefreshGameListComplete()
 {
   emit GameListRefreshCompleted();
-}
-
-void Settings::RefreshMetadata()
-{
-  emit MetadataRefreshRequested();
 }
 
 void Settings::NotifyMetadataRefreshComplete()
@@ -216,15 +394,14 @@ void Settings::SetStateSlot(int slot)
   GetQSettings().setValue(QStringLiteral("Emulation/StateSlot"), slot);
 }
 
-void Settings::SetHideCursor(bool hide_cursor)
+Config::ShowCursor Settings::GetCursorVisibility() const
 {
-  SConfig::GetInstance().bHideCursor = hide_cursor;
-  emit HideCursorChanged();
+  return Config::Get(Config::MAIN_SHOW_CURSOR);
 }
 
-bool Settings::GetHideCursor() const
+bool Settings::GetLockCursor() const
 {
-  return SConfig::GetInstance().bHideCursor;
+  return Config::Get(Config::MAIN_LOCK_CURSOR);
 }
 
 void Settings::SetKeepWindowOnTop(bool top)
@@ -232,7 +409,6 @@ void Settings::SetKeepWindowOnTop(bool top)
   if (IsKeepWindowOnTopEnabled() == top)
     return;
 
-  Config::SetBaseOrCurrent(Config::MAIN_KEEP_WINDOW_ON_TOP, top);
   emit KeepWindowOnTopChanged(top);
 }
 
@@ -241,30 +417,41 @@ bool Settings::IsKeepWindowOnTopEnabled() const
   return Config::Get(Config::MAIN_KEEP_WINDOW_ON_TOP);
 }
 
+bool Settings::GetGraphicModsEnabled() const
+{
+  return Config::Get(Config::GFX_MODS_ENABLE);
+}
+
+void Settings::SetGraphicModsEnabled(bool enabled)
+{
+  if (GetGraphicModsEnabled() == enabled)
+  {
+    return;
+  }
+
+  Config::SetBaseOrCurrent(Config::GFX_MODS_ENABLE, enabled);
+  emit EnableGfxModsChanged(enabled);
+}
+
 int Settings::GetVolume() const
 {
-  return SConfig::GetInstance().m_Volume;
+  return Config::Get(Config::MAIN_AUDIO_VOLUME);
 }
 
 void Settings::SetVolume(int volume)
 {
   if (GetVolume() != volume)
-  {
-    SConfig::GetInstance().m_Volume = volume;
-    emit VolumeChanged(volume);
-  }
+    Config::SetBaseOrCurrent(Config::MAIN_AUDIO_VOLUME, volume);
 }
 
 void Settings::IncreaseVolume(int volume)
 {
-  AudioCommon::IncreaseVolume(volume);
-  emit VolumeChanged(GetVolume());
+  AudioCommon::IncreaseVolume(Core::System::GetInstance(), volume);
 }
 
 void Settings::DecreaseVolume(int volume)
 {
-  AudioCommon::DecreaseVolume(volume);
-  emit VolumeChanged(GetVolume());
+  AudioCommon::DecreaseVolume(Core::System::GetInstance(), volume);
 }
 
 bool Settings::IsLogVisible() const
@@ -295,12 +482,6 @@ void Settings::SetLogConfigVisible(bool visible)
   }
 }
 
-GameListModel* Settings::GetGameListModel() const
-{
-  static GameListModel* model = new GameListModel;
-  return model;
-}
-
 std::shared_ptr<NetPlay::NetPlayClient> Settings::GetNetPlayClient()
 {
   return m_client;
@@ -326,32 +507,23 @@ void Settings::ResetNetPlayServer(NetPlay::NetPlayServer* server)
 
 bool Settings::GetCheatsEnabled() const
 {
-  return SConfig::GetInstance().bEnableCheats;
-}
-
-void Settings::SetCheatsEnabled(bool enabled)
-{
-  if (SConfig::GetInstance().bEnableCheats != enabled)
-  {
-    SConfig::GetInstance().bEnableCheats = enabled;
-    emit EnableCheatsChanged(enabled);
-  }
+  return Config::Get(Config::MAIN_ENABLE_CHEATS);
 }
 
 void Settings::SetDebugModeEnabled(bool enabled)
 {
+  if (AchievementManager::GetInstance().IsHardcoreModeActive())
+    enabled = false;
   if (IsDebugModeEnabled() != enabled)
   {
-    SConfig::GetInstance().bEnableDebugging = enabled;
+    Config::SetBaseOrCurrent(Config::MAIN_ENABLE_DEBUGGING, enabled);
     emit DebugModeToggled(enabled);
   }
-  if (enabled)
-    SetCodeVisible(true);
 }
 
 bool Settings::IsDebugModeEnabled() const
 {
-  return SConfig::GetInstance().bEnableDebugging;
+  return Config::Get(Config::MAIN_ENABLE_DEBUGGING);
 }
 
 void Settings::SetRegistersVisible(bool enabled)
@@ -425,21 +597,21 @@ void Settings::SetCodeVisible(bool enabled)
 
 bool Settings::IsCodeVisible() const
 {
-  return GetQSettings().value(QStringLiteral("debugger/showcode")).toBool();
+  return GetQSettings().value(QStringLiteral("debugger/showcode"), true).toBool();
 }
 
 void Settings::SetMemoryVisible(bool enabled)
 {
   if (IsMemoryVisible() == enabled)
     return;
-  QSettings().setValue(QStringLiteral("debugger/showmemory"), enabled);
+  GetQSettings().setValue(QStringLiteral("debugger/showmemory"), enabled);
 
   emit MemoryVisibilityChanged(enabled);
 }
 
 bool Settings::IsMemoryVisible() const
 {
-  return QSettings().value(QStringLiteral("debugger/showmemory")).toBool();
+  return GetQSettings().value(QStringLiteral("debugger/showmemory")).toBool();
 }
 
 void Settings::SetNetworkVisible(bool enabled)
@@ -460,14 +632,28 @@ void Settings::SetJITVisible(bool enabled)
 {
   if (IsJITVisible() == enabled)
     return;
-  QSettings().setValue(QStringLiteral("debugger/showjit"), enabled);
+  GetQSettings().setValue(QStringLiteral("debugger/showjit"), enabled);
 
   emit JITVisibilityChanged(enabled);
 }
 
 bool Settings::IsJITVisible() const
 {
-  return QSettings().value(QStringLiteral("debugger/showjit")).toBool();
+  return GetQSettings().value(QStringLiteral("debugger/showjit")).toBool();
+}
+
+void Settings::SetAssemblerVisible(bool enabled)
+{
+  if (IsAssemblerVisible() == enabled)
+    return;
+  GetQSettings().setValue(QStringLiteral("debugger/showassembler"), enabled);
+
+  emit AssemblerVisibilityChanged(enabled);
+}
+
+bool Settings::IsAssemblerVisible() const
+{
+  return GetQSettings().value(QStringLiteral("debugger/showassembler")).toBool();
 }
 
 void Settings::RefreshWidgetVisibility()
@@ -489,8 +675,8 @@ void Settings::SetDebugFont(QFont font)
 
 QFont Settings::GetDebugFont() const
 {
-  QFont default_font = QFont(QStringLiteral("Monospace"));
-  default_font.setStyleHint(QFont::TypeWriter);
+  QFont default_font = QFont(QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
+  default_font.setPointSizeF(9.0);
 
   return GetQSettings().value(QStringLiteral("debugger/font"), default_font).value<QFont>();
 }
@@ -500,14 +686,29 @@ void Settings::SetAutoUpdateTrack(const QString& mode)
   if (mode == GetAutoUpdateTrack())
     return;
 
-  SConfig::GetInstance().m_auto_update_track = mode.toStdString();
+  Config::SetBase(Config::MAIN_AUTOUPDATE_UPDATE_TRACK, mode.toStdString());
 
   emit AutoUpdateTrackChanged(mode);
 }
 
 QString Settings::GetAutoUpdateTrack() const
 {
-  return QString::fromStdString(SConfig::GetInstance().m_auto_update_track);
+  return QString::fromStdString(Config::Get(Config::MAIN_AUTOUPDATE_UPDATE_TRACK));
+}
+
+void Settings::SetFallbackRegion(const DiscIO::Region& region)
+{
+  if (region == GetFallbackRegion())
+    return;
+
+  Config::SetBase(Config::MAIN_FALLBACK_REGION, region);
+
+  emit FallbackRegionChanged(region);
+}
+
+DiscIO::Region Settings::GetFallbackRegion() const
+{
+  return Config::Get(Config::MAIN_FALLBACK_REGION);
 }
 
 void Settings::SetAnalyticsEnabled(bool enabled)
@@ -515,14 +716,14 @@ void Settings::SetAnalyticsEnabled(bool enabled)
   if (enabled == IsAnalyticsEnabled())
     return;
 
-  SConfig::GetInstance().m_analytics_enabled = enabled;
+  Config::SetBase(Config::MAIN_ANALYTICS_ENABLED, enabled);
 
   emit AnalyticsToggled(enabled);
 }
 
 bool Settings::IsAnalyticsEnabled() const
 {
-  return SConfig::GetInstance().m_analytics_enabled;
+  return Config::Get(Config::MAIN_ANALYTICS_ENABLED);
 }
 
 void Settings::SetToolBarVisible(bool visible)
@@ -566,32 +767,52 @@ void Settings::SetBatchModeEnabled(bool batch)
 
 bool Settings::IsSDCardInserted() const
 {
-  return SConfig::GetInstance().m_WiiSDCard;
+  return Config::Get(Config::MAIN_WII_SD_CARD);
 }
 
 void Settings::SetSDCardInserted(bool inserted)
 {
   if (IsSDCardInserted() != inserted)
   {
-    SConfig::GetInstance().m_WiiSDCard = inserted;
+    Config::SetBaseOrCurrent(Config::MAIN_WII_SD_CARD, inserted);
     emit SDCardInsertionChanged(inserted);
-
-    auto* ios = IOS::HLE::GetIOS();
-    if (ios)
-      ios->SDIO_EventNotify();
   }
 }
 
 bool Settings::IsUSBKeyboardConnected() const
 {
-  return SConfig::GetInstance().m_WiiKeyboard;
+  return Config::Get(Config::MAIN_WII_KEYBOARD);
 }
 
 void Settings::SetUSBKeyboardConnected(bool connected)
 {
   if (IsUSBKeyboardConnected() != connected)
   {
-    SConfig::GetInstance().m_WiiKeyboard = connected;
+    Config::SetBaseOrCurrent(Config::MAIN_WII_KEYBOARD, connected);
     emit USBKeyboardConnectionChanged(connected);
   }
+}
+
+bool Settings::IsWiiSpeakMuted() const
+{
+  return Config::Get(Config::MAIN_WII_SPEAK_MUTED);
+}
+
+void Settings::SetWiiSpeakMuted(bool muted)
+{
+  if (IsWiiSpeakMuted() == muted)
+    return;
+
+  Config::SetBaseOrCurrent(Config::MAIN_WII_SPEAK_MUTED, muted);
+  emit WiiSpeakMuteChanged(muted);
+}
+
+void Settings::SetIsContinuouslyFrameStepping(bool is_stepping)
+{
+  m_continuously_frame_stepping = is_stepping;
+}
+
+bool Settings::GetIsContinuouslyFrameStepping() const
+{
+  return m_continuously_frame_stepping;
 }

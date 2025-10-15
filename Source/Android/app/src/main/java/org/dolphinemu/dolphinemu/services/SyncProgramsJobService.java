@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 package org.dolphinemu.dolphinemu.services;
 
 import android.app.job.JobParameters;
@@ -6,16 +8,15 @@ import android.content.Context;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.PersistableBundle;
+import android.util.Log;
 
 import androidx.tvprovider.media.tv.Channel;
 import androidx.tvprovider.media.tv.PreviewProgram;
 import androidx.tvprovider.media.tv.TvContractCompat;
 
-import android.util.Log;
-
 import org.dolphinemu.dolphinemu.R;
 import org.dolphinemu.dolphinemu.model.GameFile;
-import org.dolphinemu.dolphinemu.ui.platform.Platform;
+import org.dolphinemu.dolphinemu.ui.platform.PlatformTab;
 import org.dolphinemu.dolphinemu.utils.AppLinkHelper;
 import org.dolphinemu.dolphinemu.utils.TvUtil;
 
@@ -95,11 +96,12 @@ public class SyncProgramsJobService extends JobService
         for (Long channelId : params)
         {
           Channel channel = TvUtil.getChannelById(context, channelId);
-          for (Platform platform : Platform.values())
+          for (PlatformTab platformTab : PlatformTab.values())
           {
-            if (channel != null && channel.getDisplayName().equals(platform.getHeaderName()))
+            if (channel != null &&
+                    channel.getAppLinkIntentUri().equals(AppLinkHelper.buildBrowseUri(platformTab)))
             {
-              getGamesByPlatform(platform);
+              getGamesByPlatform(platformTab);
               syncPrograms(channelId);
             }
           }
@@ -108,9 +110,9 @@ public class SyncProgramsJobService extends JobService
       return true;
     }
 
-    private void getGamesByPlatform(Platform platform)
+    private void getGamesByPlatform(PlatformTab platformTab)
     {
-      updatePrograms = GameFileCacheService.getGameFilesForPlatform(platform);
+      updatePrograms = GameFileCacheManager.getGameFilesForPlatformTab(platformTab);
     }
 
     private void syncPrograms(long channelId)

@@ -1,22 +1,28 @@
 
 add_library(dolphin_libretro SHARED
+  Audio.cpp
   Boot.cpp
   Host.cpp
   Input.cpp
   Log.cpp
   Main.cpp
-  Options.cpp
   Video.cpp
 )
 
-if (NOT APPLE AND ENABLE_VULKAN)
-   target_sources(dolphin_libretro PRIVATE
-      Vulkan.cpp
-   )
+if(ENABLE_VULKAN)
+  target_sources(dolphin_libretro PRIVATE
+    Vulkan.cpp
+  )
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/Externals/Libretro/Include)
-include_directories(${CMAKE_SOURCE_DIR}/Externals/Vulkan/Include)
+
+if(ENABLE_VULKAN)
+	include_directories(${CMAKE_SOURCE_DIR}/Externals/Vulkan-Headers/include)
+	include_directories(${CMAKE_SOURCE_DIR}/Externals/VulkanMemoryAllocator/include)
+endif()
+
+target_include_directories(dolphin_libretro PRIVATE ${CMAKE_SOURCE_DIR}/Externals/Libretro/Include)
 
 set(LIBRARY_OUTPUT_PATH "${CMAKE_BINARY_DIR}")
 
@@ -38,38 +44,44 @@ endif()
 
 if (MSVC)
    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /DELAYLOAD:OpenGL32.dll /DELAYLOAD:DInput8.dll")
+   target_link_libraries(dolphin_libretro PRIVATE
+     dxguid
+     windowsapp
+   )
 endif()
 
 if(MSVC)
-	if(LIBRETRO_STATIC)
-		 target_link_libraries(dolphin_libretro PRIVATE
-				Delayimp.lib
-				core
-				uicommon
-				${LIBS}
-				"-static-libgcc -static-libstdc++"
-		 )
-	else()
-		 target_link_libraries(dolphin_libretro PRIVATE
-				Delayimp.lib
-				core
-				uicommon
-				${LIBS}
-		 )
-	endif()
+	target_link_libraries(dolphin_libretro PRIVATE
+		Delayimp.lib
+		core
+		uicommon
+		${LIBS}
+	)
 else()
-	if(LIBRETRO_STATIC)
-		 target_link_libraries(dolphin_libretro PRIVATE
-				core
-				uicommon
-				${LIBS}
-				"-static-libgcc -static-libstdc++"
-		 )
-	else()
-		 target_link_libraries(dolphin_libretro PRIVATE
-				core
-				uicommon
-				${LIBS}
-		 )
-	endif()
+	target_link_libraries(dolphin_libretro PRIVATE
+		core
+		uicommon
+		${LIBS}
+	 )
+endif()
+
+set(LIBRETRO_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/Externals/Libretro/Include)
+
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/Common)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/VideoContexts)
+
+target_link_libraries(dolphin_libretro PRIVATE
+  dolphin_libretro_common
+  dolphin_libretro_videocontexts
+)
+
+if(MINGW)
+  target_link_libraries(dolphin_libretro PRIVATE
+    common
+    setupapi
+  )
+endif()
+
+if(MINGW OR LIBRETRO_STATIC)
+	target_link_options(dolphin_libretro PRIVATE -static-libgcc -static-libstdc++)
 endif()

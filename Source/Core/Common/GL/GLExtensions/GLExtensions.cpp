@@ -1,12 +1,12 @@
 // Copyright 2013 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "Common/GL/GLExtensions/GLExtensions.h"
 
 #include <sstream>
 #include <unordered_map>
 
 #include "Common/GL/GLContext.h"
-#include "Common/GL/GLExtensions/GLExtensions.h"
 #include "Common/Logging/Log.h"
 
 #if defined(__linux__) || defined(__APPLE__)
@@ -996,41 +996,23 @@ PFNDOLDISPATCHCOMPUTEPROC dolDispatchCompute;
 PFNDOLDISPATCHCOMPUTEINDIRECTPROC dolDispatchComputeIndirect;
 
 // Creates a GLFunc object that requires a feature
-#define GLFUNC_REQUIRES(x, y)                                                                      \
-  {                                                                                                \
-    (void**)&x, #x, y                                                                              \
-  }
+#define GLFUNC_REQUIRES(x, y) {(void**)&x, #x, y}
 // Creates a GLFunc object with a different function suffix
 // For when we want to use the same function pointer, but different function name
-#define GLFUNC_SUFFIX(x, y, z)                                                                     \
-  {                                                                                                \
-    (void**)&x, #x #y, z                                                                           \
-  }
+#define GLFUNC_SUFFIX(x, y, z) {(void**)&x, #x #y, z}
 // Creates a GLFunc object that should always be able to get grabbed
 // Used for Desktop OpenGL functions that should /always/ be provided.
 // aka GL 1.1/1.2/1.3/1.4
-#define GLFUNC_ALWAYS_REQUIRED(x)                                                                  \
-  {                                                                                                \
-    (void**)&x, #x, "VERSION_GL"                                                                   \
-  }
+#define GLFUNC_ALWAYS_REQUIRED(x) {(void**)&x, #x, "VERSION_GL"}
 // Creates a GLFunc object that should be able to get grabbed
 // on both GL and ES
-#define GL_ES_FUNC_ALWAYS_REQUIRED(x)                                                              \
-  {                                                                                                \
-    (void**)&x, #x, "VERSION_GL |VERSION_GLES_2"                                                   \
-  }
+#define GL_ES_FUNC_ALWAYS_REQUIRED(x) {(void**)&x, #x, "VERSION_GL |VERSION_GLES_2"}
 // Creates a GLFunc object that should be able to get grabbed
 // on both GL and ES 3.0
-#define GL_ES3_FUNC_ALWAYS_REQUIRED(x)                                                             \
-  {                                                                                                \
-    (void**)&x, #x, "VERSION_GL |VERSION_GLES_3"                                                   \
-  }
+#define GL_ES3_FUNC_ALWAYS_REQUIRED(x) {(void**)&x, #x, "VERSION_GL |VERSION_GLES_3"}
 // Creates a GLFunc object that should be able to get grabbed
 // on both GL and ES 3.2
-#define GL_ES32_FUNC_ALWAYS_REQUIRED(x)                                                            \
-  {                                                                                                \
-    (void**)&x, #x, "VERSION_GL |VERSION_GLES_3_2"                                                 \
-  }
+#define GL_ES32_FUNC_ALWAYS_REQUIRED(x) {(void**)&x, #x, "VERSION_GL |VERSION_GLES_3_2"}
 
 struct GLFunc
 {
@@ -1674,7 +1656,7 @@ const GLFunc gl_function_array[] = {
     GLFUNC_REQUIRES(glDrawArraysInstancedBaseInstance, "VERSION_4_2"),
     GLFUNC_REQUIRES(glDrawElementsInstancedBaseInstance, "VERSION_4_2"),
     GLFUNC_REQUIRES(glDrawElementsInstancedBaseVertexBaseInstance, "VERSION_4_2"),
-    GLFUNC_REQUIRES(glGetInternalformativ, "VERSION_4_2"),
+    GLFUNC_REQUIRES(glGetInternalformativ, "VERSION_4_2 |VERSION_GLES_3"),
     GLFUNC_REQUIRES(glGetActiveAtomicCounterBufferiv, "VERSION_4_2"),
     GLFUNC_REQUIRES(glBindImageTexture, "VERSION_4_2"),
     GLFUNC_REQUIRES(glMemoryBarrier, "VERSION_4_2"),
@@ -2404,7 +2386,7 @@ static void InitExtensionList(GLContext* context)
     case 100:
       break;
     }
-    // So we can easily determine if we are running dekstop GL
+    // So we can easily determine if we are running desktop GL
     s_extension_list["VERSION_GL"] = true;
   }
 
@@ -2439,7 +2421,7 @@ static void* GetFuncAddress(GLContext* context, const std::string& name, void** 
     *func = dlsym(RTLD_NEXT, name.c_str());
 #endif
     if (*func == nullptr)
-      ERROR_LOG(VIDEO, "Couldn't load function %s", name.c_str());
+      ERROR_LOG_FMT(VIDEO, "Couldn't load function {}", name);
   }
   return *func;
 }

@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <libretro.h>
 #include <string>
+#include <functional>
 
 #include "Common/CommonPaths.h"
 #include "Common/FileUtil.h"
@@ -13,10 +14,13 @@
 #include "Core/Core.h"
 #include "Core/HW/DVD/DVDInterface.h"
 #include "Core/HW/VideoInterface.h"
+#include "Core/HW/WiimoteReal/WiimoteReal.h"
 #include "Core/PowerPC/PowerPC.h"
+#include "Core/System.h"
+#include "DolphinLibretro/Audio.h"
 #include "DolphinLibretro/Input.h"
 #include "DolphinLibretro/Log.h"
-#include "DolphinLibretro/Options.h"
+#include "DolphinLibretro/Common/Options.h"
 #include "DolphinLibretro/Video.h"
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
 #include "UICommon/DiscordPresence.h"
@@ -41,7 +45,7 @@ static std::string DenormalizePath(const std::string& path);
 static unsigned disk_index = 0;
 static bool eject_state;
 static std::vector<std::string> disk_paths;
-}  // namespace Libretro
+} // namespace Libretro
 
 bool retro_load_game(const struct retro_game_info* game)
 {
@@ -70,44 +74,83 @@ bool retro_load_game(const struct retro_game_info* game)
   else
     sys_dir = "dolphin-emu" DIR_SEP "Sys";
 
+#ifdef ANDROID
+  static bool sysdir_set = false;
+
+  if(!sysdir_set)
+  {
+    File::SetSysDirectory(sys_dir);
+    sysdir_set = true;
+  }
+#else
   File::SetSysDirectory(sys_dir);
+#endif
+
   UICommon::SetUserDirectory(user_dir);
   UICommon::CreateDirectories();
   UICommon::Init();
   Libretro::Log::Init();
   Discord::SetDiscordPresenceEnabled(false);
   Common::SetEnableAlert(false);
+  Common::SetAbortOnPanicAlert(false);
+  Common::RegisterMsgAlertHandler([](const char* caption, const char* text,
+    bool yes_no, Common::MsgType style) -> bool
+  {
+    // Log the message instead of showing a popup
+    INFO_LOG_FMT(COMMON, "Suppressed popup: {} - {}", caption, text);
+    return true; // Always "continue"
+  });
 
-  INFO_LOG(COMMON, "User Directory set to '%s'", user_dir.c_str());
-  INFO_LOG(COMMON, "System Directory set to '%s'", sys_dir.c_str());
+  INFO_LOG_FMT(COMMON, "User Directory set to '{}'", user_dir);
+  INFO_LOG_FMT(COMMON, "System Directory set to '{}'", sys_dir);
 
   /* disable throttling emulation to match GetTargetRefreshRate() */
   Core::SetIsThrottlerTempDisabled(true);
-  SConfig::GetInstance().m_EmulationSpeed = Libretro::Options::EmulationSpeed;
-
-#if defined(_DEBUG)
-  SConfig::GetInstance().bFastmem = false;
-#else
-  SConfig::GetInstance().bFastmem = Libretro::Options::fastmem;
-#endif
-  SConfig::GetInstance().bDSPHLE = Libretro::Options::DSPHLE;
-  SConfig::GetInstance().m_DSPEnableJIT = Libretro::Options::DSPEnableJIT;
-  SConfig::GetInstance().cpu_core = Libretro::Options::cpu_core;
-  SConfig::GetInstance().SelectedLanguage = (int)(DiscIO::Language)Libretro::Options::Language - 1;
-  SConfig::GetInstance().bCPUThread = true;
-  SConfig::GetInstance().bEMUThread = false;
   SConfig::GetInstance().bBootToPause = true;
-  SConfig::GetInstance().m_OCFactor = Libretro::Options::cpuClockRate;
-  SConfig::GetInstance().m_OCEnable = Libretro::Options::cpuClockRate != 1.0;
-  SConfig::GetInstance().sBackend = BACKEND_NULLSOUND;
-  SConfig::GetInstance().m_DumpAudio = false;
-  SConfig::GetInstance().bDPL2Decoder = false;
-  SConfig::GetInstance().iLatency = 0;
-  SConfig::GetInstance().m_audio_stretch = false;
-  SConfig::GetInstance().m_WiimoteContinuousScanning = Libretro::Options::WiimoteContinuousScanning;
-  SConfig::GetInstance().bEnableCheats = Libretro::Options::cheatsEnabled;
-  SConfig::GetInstance().bOnScreenDisplayMessages = Libretro::Options::osdEnabled;
-  SConfig::GetInstance().bFastDiscSpeed = Libretro::Options::fastDiscSpeed;
+
+  Config::SetCurrent(Config::MAIN_EMULATION_SPEED, Libretro::Options::EmulationSpeed);
+
+  // Disabled due to current upstream bug causing fastmem disabled to segfault
+//#if defined(_DEBUG)
+//  Config::SetCurrent(Config::MAIN_FASTMEM, false);
+//#else
+  Config::SetCurrent(Config::MAIN_FASTMEM, Libretro::Options::fastmem);
+//#endif
+  Config::SetCurrent(Config::MAIN_DSP_HLE, Libretro::Options::DSPHLE);
+  Config::SetCurrent(Config::MAIN_DSP_JIT, Libretro::Options::DSPEnableJIT);
+  Config::SetCurrent(Config::MAIN_GC_LANGUAGE, (int)(DiscIO::Language)Libretro::Options::Language - 1);
+  Config::SetCurrent(Config::MAIN_CPU_THREAD, true);
+  Config::SetCurrent(Config::MAIN_OVERCLOCK, Libretro::Options::cpuClockRate);
+  Config::SetCurrent(Config::MAIN_OVERCLOCK_ENABLE, Libretro::Options::cpuClockRate != 1.0);
+  Config::SetCurrent(Config::MAIN_AUDIO_BACKEND, BACKEND_NULLSOUND);
+  Config::SetCurrent(Config::MAIN_DUMP_AUDIO, false);
+  Config::SetCurrent(Config::MAIN_DPL2_DECODER, false);
+  Config::SetCurrent(Config::MAIN_AUDIO_LATENCY, 0);
+  Config::SetCurrent(Config::MAIN_AUDIO_FILL_GAPS, false);
+  Config::SetCurrent(Config::MAIN_WIIMOTE_CONTINUOUS_SCANNING,
+                   static_cast<bool>(Libretro::Options::WiimoteContinuousScanning.Get()));
+  Config::SetCurrent(Config::MAIN_ENABLE_CHEATS, Libretro::Options::cheatsEnabled);
+  Config::SetCurrent(Config::MAIN_OSD_MESSAGES, Libretro::Options::osdEnabled);
+  Config::SetCurrent(Config::MAIN_FAST_DISC_SPEED, Libretro::Options::fastDiscSpeed);
+  Config::SetCurrent(Config::MAIN_TIME_TRACKING, false);
+
+  Libretro::Options::cpu_core.FilterForJitCapability();
+  bool can_jit = false;
+  if (!Libretro::environ_cb(RETRO_ENVIRONMENT_GET_JIT_CAPABLE, &can_jit) || !can_jit)
+  {
+    auto current = Config::Get(Config::MAIN_CPU_CORE);
+    if (current == PowerPC::CPUCore::JIT64 ||
+        current == PowerPC::CPUCore::JITARM64)
+    {
+      Config::SetCurrent(Config::MAIN_CPU_CORE, PowerPC::CPUCore::CachedInterpreter);
+    }
+#ifdef IPHONEOS
+    Config::SetCurrent(Config::GFX_VERTEX_LOADER_TYPE, VertexLoaderType::Software);
+#endif
+  } else
+  {
+    Config::SetCurrent(Config::MAIN_CPU_CORE, Libretro::Options::cpu_core);
+  }
 
   Config::SetBase(Config::SYSCONF_LANGUAGE, (u32)(DiscIO::Language)Libretro::Options::Language);
   Config::SetBase(Config::SYSCONF_WIDESCREEN, Libretro::Options::Widescreen);
@@ -122,8 +165,9 @@ bool retro_load_game(const struct retro_game_info* game)
   Config::SetBase(Config::GFX_BACKEND_MULTITHREADING, false);
   Config::SetBase(Config::GFX_SHADER_COMPILATION_MODE, Libretro::Options::shaderCompilationMode);
   Config::SetBase(Config::GFX_ENHANCE_MAX_ANISOTROPY, Libretro::Options::maxAnisotropy);
-  Config::SetBase(Config::GFX_HACK_SKIP_DUPLICATE_XFBS, Libretro::Options::skipDupeFrames);
   Config::SetBase(Config::GFX_HACK_IMMEDIATE_XFB, Libretro::Options::immediatexfb);
+  Config::SetBase(Config::GFX_HACK_SKIP_DUPLICATE_XFBS, Libretro::Options::skipDupeFrames);
+  //Config::SetBase(Config::GFX_HACK_EARLY_XFB_OUTPUT, false);
   Config::SetBase(Config::GFX_HACK_COPY_EFB_SCALED, Libretro::Options::efbScaledCopy);
   Config::SetBase(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM, Libretro::Options::efbToTexture);
   Config::SetBase(Config::GFX_HACK_DISABLE_COPY_TO_VRAM, Libretro::Options::efbToVram);
@@ -131,10 +175,11 @@ bool retro_load_game(const struct retro_game_info* game)
   Config::SetBase(Config::GFX_HACK_BBOX_ENABLE, Libretro::Options::bboxEnabled);
   Config::SetBase(Config::GFX_ENABLE_GPU_TEXTURE_DECODING, Libretro::Options::gpuTextureDecoding);
   Config::SetBase(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING, Libretro::Options::waitForShaders);
-  Config::SetBase(Config::GFX_ENHANCE_FORCE_FILTERING, Libretro::Options::forceTextureFiltering);
+  Config::SetBase(Config::GFX_ENHANCE_FORCE_TEXTURE_FILTERING, Libretro::Options::forceTextureFilteringMode);
   Config::SetBase(Config::GFX_HIRES_TEXTURES, Libretro::Options::loadCustomTextures);
   Config::SetBase(Config::GFX_CACHE_HIRES_TEXTURES, Libretro::Options::cacheCustomTextures);
   Config::SetBase(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES, Libretro::Options::textureCacheAccuracy);
+  Config::SetBase(Config::GFX_HACK_DEFER_EFB_COPIES, Libretro::Options::deferEfbCopies);
 #if 0
   Config::SetBase(Config::GFX_SHADER_COMPILER_THREADS, 1);
   Config::SetBase(Config::GFX_SHADER_PRECOMPILER_THREADS, 1);
@@ -172,11 +217,14 @@ bool retro_load_game(const struct retro_game_info* game)
       break;
   }
 
-  Libretro::Video::Init();
-  VideoBackendBase::PopulateBackendInfo();
-  NOTICE_LOG(VIDEO, "Using GFX backend: %s", Config::Get(Config::MAIN_GFX_BACKEND).c_str());
+  INFO_LOG_FMT(BOOT, "Fastmem enabled = {}", (Config::Get(Config::MAIN_FASTMEM)) ? "Yes" : "No");
+  INFO_LOG_FMT(BOOT, "JIT debug enabled = {}", Config::IsDebuggingEnabled() ? "Yes" : "No");
 
+  Libretro::Audio::Init();
+  Libretro::Video::Init();
   WindowSystemInfo wsi(WindowSystemType::Libretro, nullptr, nullptr, nullptr);
+  VideoBackendBase::PopulateBackendInfo(wsi);
+  NOTICE_LOG_FMT(VIDEO, "Using GFX backend: {}", Config::Get(Config::MAIN_GFX_BACKEND));
 
   std::vector<std::string> normalized_game_paths;
   normalized_game_paths.push_back(Libretro::NormalizePath(game->path));
@@ -190,7 +238,7 @@ bool retro_load_game(const struct retro_game_info* game)
     normalized_game_paths = ReadM3UFile(normalized_game_paths.front(), folder_path);
     if (normalized_game_paths.empty())
     {
-      ERROR_LOG(BOOT, "Could not boot %s. M3U contains no paths\n", game->path);
+      ERROR_LOG_FMT(BOOT, "Could not boot {}. M3U contains no paths", game->path);
       return false;
     }
   }
@@ -198,13 +246,16 @@ bool retro_load_game(const struct retro_game_info* game)
   for (auto& normalized_game_path : normalized_game_paths)
     Libretro::disk_paths.push_back(Libretro::DenormalizePath(normalized_game_path));
 
-  if (!BootManager::BootCore(BootParameters::GenerateFromFile(normalized_game_paths), wsi))
+  Libretro::Input::Init(wsi);
+
+  if (!BootManager::BootCore(Core::System::GetInstance(),
+                             BootParameters::GenerateFromFile(normalized_game_paths), wsi))
   {
-    ERROR_LOG(BOOT, "Could not boot %s\n", game->path);
+    ERROR_LOG_FMT(BOOT, "Could not boot {}", game->path);
     return false;
   }
 
-  Libretro::Input::Init();
+  Libretro::Input::InitStage2();
 
   return true;
 }
@@ -217,11 +268,20 @@ bool retro_load_game_special(unsigned game_type, const struct retro_game_info* i
 
 void retro_unload_game(void)
 {
-  Core::Stop();
-  Core::Shutdown();
-  g_video_backend->ShutdownShared();
+  if (Core::IsRunning(Core::System::GetInstance()))
+  {
+    Core::Stop(Core::System::GetInstance());
+    Core::Shutdown(Core::System::GetInstance());
+  }
+
+  if (g_video_backend)
+  {
+    g_video_backend->Shutdown();
+  }
+
   Libretro::Input::Shutdown();
   Libretro::Log::Shutdown();
+  UICommon::ShutdownControllers();
   UICommon::Shutdown();
 }
 
@@ -267,9 +327,13 @@ static bool retro_set_eject_state(bool ejected)
 
   if (!ejected)
   {
-    if (disk_index >= 0 && disk_index < (int)disk_paths.size())
+    if (disk_index < disk_paths.size())
     {
-      Core::RunAsCPUThread([] { DVDInterface::ChangeDisc(NormalizePath(disk_paths[disk_index])); });
+      Core::RunOnCPUThread(Core::System::GetInstance(), [] {
+        Core::CPUThreadGuard guard{Core::System::GetInstance()};
+        const std::string path = NormalizePath(disk_paths[disk_index]);
+        Core::System::GetInstance().GetDVDInterface().ChangeDisc(guard, path);
+      }, true);  // wait_for_completion = true
     }
   }
 
@@ -290,7 +354,7 @@ static bool retro_set_image_index(unsigned index)
 {
   if (eject_state)
     disk_index = index;
-  
+
   return eject_state;
 }
 
@@ -316,7 +380,7 @@ static bool retro_replace_image_index(unsigned index, const struct retro_game_in
     disk_paths.erase(disk_paths.begin() + index);
     if (!disk_paths.size())
       disk_index = -1;
-    else if (disk_index > (int)index)
+    else if (disk_index > index)
       disk_index--;
   }
   else

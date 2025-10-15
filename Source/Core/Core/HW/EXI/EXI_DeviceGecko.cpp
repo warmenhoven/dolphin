@@ -1,6 +1,5 @@
 // Copyright 2011 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/HW/EXI/EXI_DeviceGecko.h"
 
@@ -44,7 +43,7 @@ GeckoSockServer::~GeckoSockServer()
     clientThread.join();
   }
 
-  if (client_count <= 0)
+  if (client_count <= 0 && connectionThread.joinable())
   {
     server_running.Clear();
     connectionThread.join();
@@ -59,7 +58,7 @@ void GeckoSockServer::GeckoConnectionWaiter()
   server_port = 0xd6ec;  // "dolphin gecko"
   for (int bind_tries = 0; bind_tries <= 10 && !server_running.IsSet(); bind_tries++)
   {
-    server_running.Set(server.listen(server_port) == sf::Socket::Done);
+    server_running.Set(server.listen(server_port) == sf::Socket::Status::Done);
     if (!server_running.IsSet())
       server_port++;
   }
@@ -74,9 +73,9 @@ void GeckoSockServer::GeckoConnectionWaiter()
   auto new_client = std::make_unique<sf::TcpSocket>();
   while (server_running.IsSet())
   {
-    if (server.accept(*new_client) == sf::Socket::Done)
+    if (server.accept(*new_client) == sf::Socket::Status::Done)
     {
-      std::lock_guard<std::mutex> lk(connection_lock);
+      std::lock_guard lk(connection_lock);
       waiting_socks.push(std::move(new_client));
 
       new_client = std::make_unique<sf::TcpSocket>();
@@ -90,7 +89,7 @@ bool GeckoSockServer::GetAvailableSock()
 {
   bool sock_filled = false;
 
-  std::lock_guard<std::mutex> lk(connection_lock);
+  std::lock_guard lk(connection_lock);
 
   if (!waiting_socks.empty())
   {
@@ -125,13 +124,13 @@ void GeckoSockServer::ClientThread()
     bool did_nothing = true;
 
     {
-      std::lock_guard<std::mutex> lk(transfer_lock);
+      std::lock_guard lk(transfer_lock);
 
       // what's an ideal buffer size?
       std::array<char, 128> buffer;
       std::size_t got = 0;
 
-      if (client->receive(buffer.data(), buffer.size(), got) == sf::Socket::Disconnected)
+      if (client->receive(buffer.data(), buffer.size(), got) == sf::Socket::Status::Disconnected)
         client_running.Clear();
 
       if (got != 0)
@@ -148,7 +147,7 @@ void GeckoSockServer::ClientThread()
         std::vector<char> packet(send_fifo.begin(), send_fifo.end());
         send_fifo.clear();
 
-        if (client->send(&packet[0], packet.size()) == sf::Socket::Disconnected)
+        if (client->send(&packet[0], packet.size()) == sf::Socket::Status::Disconnected)
           client_running.Clear();
       }
     }  // unlock transfer
@@ -158,6 +157,10 @@ void GeckoSockServer::ClientThread()
   }
 
   client->disconnect();
+}
+
+CEXIGecko::CEXIGecko(Core::System& system) : IEXIDevice(system)
+{
 }
 
 void CEXIGecko::ImmReadWrite(u32& _uData, u32 _uSize)
@@ -186,7 +189,7 @@ void CEXIGecko::ImmReadWrite(u32& _uData, u32 _uSize)
   // |= 0x08000000 if successful
   case CMD_RECV:
   {
-    std::lock_guard<std::mutex> lk(transfer_lock);
+    std::lock_guard lk(transfer_lock);
     if (!recv_fifo.empty())
     {
       _uData = 0x08000000 | (recv_fifo.front() << 16);
@@ -199,7 +202,7 @@ void CEXIGecko::ImmReadWrite(u32& _uData, u32 _uSize)
   // |= 0x04000000 if successful
   case CMD_SEND:
   {
-    std::lock_guard<std::mutex> lk(transfer_lock);
+    std::lock_guard lk(transfer_lock);
     send_fifo.push_back(_uData >> 20);
     _uData = 0x04000000;
     break;
@@ -215,13 +218,13 @@ void CEXIGecko::ImmReadWrite(u32& _uData, u32 _uSize)
   // |= 0x04000000 if data in recv FIFO
   case CMD_CHK_RX:
   {
-    std::lock_guard<std::mutex> lk(transfer_lock);
+    std::lock_guard lk(transfer_lock);
     _uData = recv_fifo.empty() ? 0 : 0x04000000;
     break;
   }
 
   default:
-    ERROR_LOG(EXPANSIONINTERFACE, "Unknown USBGecko command %x", _uData);
+    ERROR_LOG_FMT(EXPANSIONINTERFACE, "Unknown USBGecko command {:x}", _uData);
     break;
   }
 }

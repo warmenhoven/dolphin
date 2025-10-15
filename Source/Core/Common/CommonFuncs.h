@@ -1,11 +1,14 @@
 // Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
 #include <optional>
 #include <string>
+#ifdef __MINGW32__
+#include <sys/stat.h>
+#endif
+
 #include "Common/CommonTypes.h"
 
 #ifndef _WIN32
@@ -27,8 +30,12 @@
 #define fseeko _fseeki64
 #define ftello _ftelli64
 #define atoll _atoi64
+#ifndef stat
 #define stat _stat64
+#endif
+#ifndef fstat
 #define fstat _fstat64
+#endif
 #define fileno _fileno
 
 extern "C" {
@@ -38,10 +45,16 @@ __declspec(dllimport) void __stdcall DebugBreak(void);
   {                                                                                                \
     DebugBreak();                                                                                  \
   }
-#endif  // WIN32 ndef
+#endif  // _WIN32
 
-// Wrapper function to get last strerror(errno) string.
-// This function might change the error code.
+namespace Common
+{
+// strerror_r wrapper to handle XSI and GNU versions.
+const char* StrErrorWrapper(int error, char* buffer, std::size_t length);
+
+// Wrapper functions to get strerror(errno) string, which itself is not threadsafe.
+// These functions might change the error code.
+std::string StrerrorString(int error);
 std::string LastStrerrorString();
 
 #ifdef _WIN32
@@ -49,6 +62,10 @@ std::string LastStrerrorString();
 // This function might change the error code.
 std::string GetLastErrorString();
 
+// Like GetLastErrorString() but if you have already queried the error code.
+std::string GetWin32ErrorString(unsigned long error_code);
+
 // Obtains a full path to the specified module.
 std::optional<std::wstring> GetModuleName(void* hInstance);
 #endif
+}  // namespace Common

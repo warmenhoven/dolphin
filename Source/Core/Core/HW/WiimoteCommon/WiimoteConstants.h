@@ -1,6 +1,5 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -8,6 +7,9 @@
 
 namespace WiimoteCommon
 {
+// Note this size includes the HID header.
+// e.g. 0xa1 0x3d 0x...
+// TODO: Kill/rename this constant so it's more clear.
 constexpr u8 MAX_PAYLOAD = 23;
 
 enum class InputReportID : u8
@@ -46,6 +48,15 @@ enum class OutputReportID : u8
   SpeakerData = 0x18,
   SpeakerMute = 0x19,
   IRLogicEnable2 = 0x1a,
+};
+
+enum class IRReportFormat : u8
+{
+  None,
+  Basic,     // from ReportCoreIR10Ext9 or ReportCoreAccelIR10Ext6
+  Extended,  // from ReportCoreAccelIR12
+  Full1,     // from ReportInterleave1
+  Full2,     // from ReportInterleave2
 };
 
 enum class LED : u8

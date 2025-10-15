@@ -1,6 +1,5 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/NetPlay/NetPlayBrowser.h"
 
@@ -26,12 +25,12 @@
 #include "Core/ConfigManager.h"
 
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
+#include "DolphinQt/QtUtils/NonDefaultQPushButton.h"
 #include "DolphinQt/Settings.h"
 
 NetPlayBrowser::NetPlayBrowser(QWidget* parent) : QDialog(parent)
 {
   setWindowTitle(tr("NetPlay Session Browser"));
-  setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
   CreateWidgets();
   RestoreSettings();
@@ -85,7 +84,7 @@ void NetPlayBrowser::CreateWidgets()
 
   m_status_label = new QLabel;
   m_button_box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  m_button_refresh = new QPushButton(tr("Refresh"));
+  m_button_refresh = new NonDefaultQPushButton(tr("Refresh"));
   m_edit_name = new QLineEdit;
   m_edit_game_id = new QLineEdit;
   m_check_hide_incompatible = new QCheckBox(tr("Hide Incompatible Sessions"));
@@ -129,8 +128,7 @@ void NetPlayBrowser::CreateWidgets()
 
 void NetPlayBrowser::ConnectWidgets()
 {
-  connect(m_region_combo, qOverload<int>(&QComboBox::currentIndexChanged), this,
-          &NetPlayBrowser::Refresh);
+  connect(m_region_combo, &QComboBox::currentIndexChanged, this, &NetPlayBrowser::Refresh);
 
   connect(m_button_box, &QDialogButtonBox::accepted, this, &NetPlayBrowser::accept);
   connect(m_button_box, &QDialogButtonBox::rejected, this, &NetPlayBrowser::reject);
@@ -159,7 +157,7 @@ void NetPlayBrowser::Refresh()
   std::map<std::string, std::string> filters;
 
   if (m_check_hide_incompatible->isChecked())
-    filters["version"] = Common::scm_desc_str;
+    filters["version"] = Common::GetScmDescStr();
 
   if (!m_edit_name->text().isEmpty())
     filters["name"] = m_edit_name->text().toStdString();
@@ -247,7 +245,7 @@ void NetPlayBrowser::UpdateList()
     auto* player_count = new QTableWidgetItem(QStringLiteral("%1").arg(entry.player_count));
     auto* version = new QTableWidgetItem(QString::fromStdString(entry.version));
 
-    const bool enabled = Common::scm_desc_str == entry.version;
+    const bool enabled = Common::GetScmDescStr() == entry.version;
 
     for (const auto& item : {region, name, password, in_game, game_id, player_count, version})
       item->setFlags(enabled ? Qt::ItemIsEnabled | Qt::ItemIsSelectable : Qt::NoItemFlags);
@@ -289,26 +287,25 @@ void NetPlayBrowser::accept()
 
   const int index = m_table_widget->selectedItems()[0]->row();
 
-  NetPlaySession& session = m_sessions[index];
+  const NetPlaySession& session = m_sessions[index];
 
   std::string server_id = session.server_id;
 
   if (m_sessions[index].has_password)
   {
-    auto* dialog = new QInputDialog(this);
+    QInputDialog dialog(this);
 
-    dialog->setWindowFlags(dialog->windowFlags() & ~Qt::WindowContextHelpButtonHint);
-    dialog->setWindowTitle(tr("Enter password"));
-    dialog->setLabelText(tr("This session requires a password:"));
-    dialog->setWindowModality(Qt::WindowModal);
-    dialog->setTextEchoMode(QLineEdit::Password);
+    dialog.setWindowTitle(tr("Enter password"));
+    dialog.setLabelText(tr("This session requires a password:"));
+    dialog.setWindowModality(Qt::WindowModal);
+    dialog.setTextEchoMode(QLineEdit::Password);
 
-    if (dialog->exec() != QDialog::Accepted)
+    if (dialog.exec() != QDialog::Accepted)
       return;
 
-    const std::string password = dialog->textValue().toStdString();
+    const std::string password = dialog.textValue().toStdString();
 
-    auto decrypted_id = session.DecryptID(password);
+    const auto decrypted_id = session.DecryptID(password);
 
     if (!decrypted_id)
     {

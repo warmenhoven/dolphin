@@ -1,6 +1,5 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/Debugger/PatchInstructionDialog.h"
 
@@ -15,7 +14,6 @@
 PatchInstructionDialog::PatchInstructionDialog(QWidget* parent, u32 address, u32 value)
     : QDialog(parent), m_address(address)
 {
-  setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
   setWindowModality(Qt::WindowModal);
   setWindowTitle(tr("Instruction"));
 

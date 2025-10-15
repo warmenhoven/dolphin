@@ -1,19 +1,17 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <concepts>
+#include <limits>
 #include <type_traits>
-#include <vector>
+#include <utility>
 
 #include "Common/CommonTypes.h"
-
-#ifdef _MSC_VER
-#include <intrin.h>
-#endif
 
 namespace MathUtil
 {
@@ -31,6 +29,31 @@ template <typename T, typename F>
 constexpr auto Lerp(const T& x, const T& y, const F& a) -> decltype(x + (y - x) * a)
 {
   return x + (y - x) * a;
+}
+
+// Casts the specified value to a Dest. The value will be clamped to fit in the destination type.
+// Warning: The result of SaturatingCast(NaN) is undefined.
+template <std::integral Dest, typename T>
+constexpr Dest SaturatingCast(T value)
+{
+  constexpr Dest lo = std::numeric_limits<Dest>::min();
+  constexpr Dest hi = std::numeric_limits<Dest>::max();
+
+  if constexpr (std::is_integral_v<T>)
+  {
+    if (std::cmp_less(value, lo))
+      return lo;
+    if (std::cmp_greater(value, hi))
+      return hi;
+  }
+  else
+  {
+    if (value < static_cast<T>(lo))
+      return lo;
+    if (value >= static_cast<T>(hi))
+      return hi;
+  }
+  return static_cast<Dest>(value);
 }
 
 template <typename T>
@@ -135,36 +158,21 @@ public:
 
   constexpr size_t Count() const { return m_running_mean.Count(); }
   constexpr T Mean() const { return m_running_mean.Mean(); }
+
   constexpr T Variance() const { return m_variance / (Count() - 1); }
-  constexpr T StandardDeviation() const { return std::sqrt(Variance()); }
+  T StandardDeviation() const { return std::sqrt(Variance()); }
+
+  constexpr T PopulationVariance() const { return m_variance / Count(); }
+  T PopulationStandardDeviation() const { return std::sqrt(PopulationVariance()); }
 
 private:
   RunningMean<T> m_running_mean;
   T m_variance{};
 };
 
-}  // namespace MathUtil
-
-float MathFloatVectorSum(const std::vector<float>&);
-
 // Rounds down. 0 -> undefined
-inline int IntLog2(u64 val)
+constexpr int IntLog2(u64 val)
 {
-#if defined(__GNUC__)
-  return 63 - __builtin_clzll(val);
-
-#elif defined(_MSC_VER)
-  unsigned long result = ULONG_MAX;
-  _BitScanReverse64(&result, val);
-  return result;
-
-#else
-  int result = -1;
-  while (val != 0)
-  {
-    val >>= 1;
-    ++result;
-  }
-  return result;
-#endif
+  return 63 - std::countl_zero(val);
 }
+}  // namespace MathUtil

@@ -1,6 +1,5 @@
 // Copyright 2018 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -25,7 +24,7 @@ private:
   void CreateWidgets();
   void ConnectWidgets();
 
-  bool eventFilter(QObject* object, QEvent* event) final override;
+  bool eventFilter(QObject* object, QEvent* event) final;
 
   QLineEdit* m_search_edit;
   QPushButton* m_close_button;

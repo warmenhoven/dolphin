@@ -1,6 +1,7 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "DiscIO/Enums.h"
 
 #include <map>
 #include <string>
@@ -10,7 +11,6 @@
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
-#include "DiscIO/Enums.h"
 
 namespace DiscIO
 {
@@ -111,9 +111,36 @@ std::string GetName(Language language, bool translate)
   return translate ? Common::GetStringT(name.c_str()) : name;
 }
 
+std::string GetName(Region region, bool translate)
+{
+  std::string name;
+
+  switch (region)
+  {
+  case Region::NTSC_J:
+    name = _trans("NTSC-J");
+    break;
+  case Region::NTSC_U:
+    name = _trans("NTSC-U");
+    break;
+  case Region::PAL:
+    name = _trans("PAL");
+    break;
+  case Region::NTSC_K:
+    name = _trans("NTSC-K");
+    break;
+  default:
+    name = _trans("Unknown");
+    break;
+  }
+
+  return translate ? Common::GetStringT(name.c_str()) : name;
+}
+
 bool IsDisc(Platform volume_type)
 {
-  return volume_type == Platform::GameCubeDisc || volume_type == Platform::WiiDisc;
+  return volume_type == Platform::GameCubeDisc || volume_type == Platform::Triforce ||
+         volume_type == Platform::WiiDisc;
 }
 
 bool IsWii(Platform volume_type)
@@ -124,6 +151,22 @@ bool IsWii(Platform volume_type)
 bool IsNTSC(Region region)
 {
   return region == Region::NTSC_J || region == Region::NTSC_U || region == Region::NTSC_K;
+}
+
+int ToGameCubeLanguage(Language language)
+{
+  if (language < Language::English || language > Language::Dutch)
+    return 0;
+  else
+    return static_cast<int>(language) - 1;
+}
+
+Language FromGameCubeLanguage(int language)
+{
+  if (language < 0 || language > 5)
+    return Language::Unknown;
+  else
+    return static_cast<Language>(language + 1);
 }
 
 // Increment CACHE_REVISION (GameFileCache.cpp) if the code below is modified
@@ -324,7 +367,7 @@ Country CountryCodeToCountry(u8 country_code, Platform platform, Region region,
 
   default:
     if (country_code > 'A')  // Silently ignore IOS wads
-      WARN_LOG(DISCIO, "Unknown Country Code! %c", country_code);
+      WARN_LOG_FMT(DISCIO, "Unknown Country Code! {}", static_cast<char>(country_code));
     return Country::Unknown;
   }
 }
@@ -346,7 +389,7 @@ Region GetSysMenuRegion(u16 title_version)
   }
 }
 
-std::string GetSysMenuVersionString(u16 title_version)
+std::string GetSysMenuVersionString(u16 title_version, bool is_vwii)
 {
   std::string version;
   char region_letter = '\0';
@@ -366,56 +409,78 @@ std::string GetSysMenuVersionString(u16 title_version)
     region_letter = 'K';
     break;
   case Region::Unknown:
-    WARN_LOG(DISCIO, "Unknown region for Wii Menu version %u", title_version);
+    WARN_LOG_FMT(DISCIO, "Unknown region for Wii Menu version {}", title_version);
     break;
   }
 
-  switch (title_version & 0xff0)
+  if (is_vwii)
   {
-  case 32:
-    version = "1.0";
-    break;
-  case 96:
-  case 128:
-    version = "2.0";
-    break;
-  case 160:
-    version = "2.1";
-    break;
-  case 192:
-    version = "2.2";
-    break;
-  case 224:
-    version = "3.0";
-    break;
-  case 256:
-    version = "3.1";
-    break;
-  case 288:
-    version = "3.2";
-    break;
-  case 320:
-  case 352:
-    version = "3.3";
-    break;
-  case 384:
-    version = (region_letter != 'K' ? "3.4" : "3.5");
-    break;
-  case 416:
-    version = "4.0";
-    break;
-  case 448:
-    version = "4.1";
-    break;
-  case 480:
-    version = "4.2";
-    break;
-  case 512:
-    version = "4.3";
-    break;
-  default:
-    version = "?.?";
-    break;
+    // For vWii return the Wii U version which installed the menu
+    switch (title_version & 0xff0)
+    {
+    case 512:
+      version = "1.0.0";
+      break;
+    case 544:
+      version = "4.0.0";
+      break;
+    case 608:
+      version = "5.2.0";
+      break;
+    default:
+      version = "?.?.?";
+      break;
+    }
+  }
+  else
+  {
+    switch (title_version & 0xff0)
+    {
+    case 32:
+      version = "1.0";
+      break;
+    case 96:
+    case 128:
+      version = "2.0";
+      break;
+    case 160:
+      version = "2.1";
+      break;
+    case 192:
+      version = "2.2";
+      break;
+    case 224:
+      version = "3.0";
+      break;
+    case 256:
+      version = "3.1";
+      break;
+    case 288:
+      version = "3.2";
+      break;
+    case 320:
+    case 352:
+      version = "3.3";
+      break;
+    case 384:
+      version = (region_letter != 'K' ? "3.4" : "3.5");
+      break;
+    case 416:
+      version = "4.0";
+      break;
+    case 448:
+      version = "4.1";
+      break;
+    case 480:
+      version = "4.2";
+      break;
+    case 512:
+      version = "4.3";
+      break;
+    default:
+      version = "?.?";
+      break;
+    }
   }
 
   if (region_letter != '\0')

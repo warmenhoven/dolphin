@@ -1,10 +1,16 @@
 // Copyright 2015 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #ifdef _WIN32
-#include <Windows.h>
 #include <cstdio>
+#include <string>
+#include <vector>
+
+#include <windows.h>
+#endif
+
+#ifdef __linux__
+#include <cstdlib>
 #endif
 
 #include <OptionParser.h>
@@ -14,18 +20,22 @@
 #include <QPushButton>
 #include <QWidget>
 
+#include "Common/Config/Config.h"
 #include "Common/MsgHandler.h"
 #include "Common/ScopeGuard.h"
+#include "Common/StringUtil.h"
 
-#include "Core/Analytics.h"
 #include "Core/Boot/Boot.h"
-#include "Core/ConfigManager.h"
+#include "Core/Config/MainSettings.h"
 #include "Core/Core.h"
+#include "Core/DolphinAnalytics.h"
+#include "Core/System.h"
 
 #include "DolphinQt/Host.h"
 #include "DolphinQt/MainWindow.h"
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
 #include "DolphinQt/QtUtils/RunOnObject.h"
+#include "DolphinQt/QtUtils/SetWindowDecorations.h"
 #include "DolphinQt/Resources.h"
 #include "DolphinQt/Settings.h"
 #include "DolphinQt/Translation.h"
@@ -38,21 +48,26 @@ static bool QtMsgAlertHandler(const char* caption, const char* text, bool yes_no
                               Common::MsgType style)
 {
   const bool called_from_cpu_thread = Core::IsCPUThread();
+  const bool called_from_gpu_thread = Core::IsGPUThread();
 
   std::optional<bool> r = RunOnObject(QApplication::instance(), [&] {
-    Common::ScopeGuard scope_guard(&Core::UndeclareAsCPUThread);
+    // If we were called from the CPU/GPU thread, set us as the CPU/GPU thread.
+    // This information is used in order to avoid deadlocks when calling e.g.
+    // Host::SetRenderFocus or Core::CPUThreadGuard. (Host::SetRenderFocus
+    // can get called automatically when a dialog steals the focus.)
+
+    Common::ScopeGuard cpu_scope_guard(&Core::UndeclareAsCPUThread);
+    Common::ScopeGuard gpu_scope_guard(&Core::UndeclareAsGPUThread);
+
+    if (!called_from_cpu_thread)
+      cpu_scope_guard.Dismiss();
+    if (!called_from_gpu_thread)
+      gpu_scope_guard.Dismiss();
+
     if (called_from_cpu_thread)
-    {
-      // Temporarily declare this as the CPU thread to avoid getting a deadlock if any DolphinQt
-      // code calls RunAsCPUThread while the CPU thread is blocked on this function returning.
-      // Notably, if the panic alert steals focus from RenderWidget, Host::SetRenderFocus gets
-      // called, which can attempt to use RunAsCPUThread to get us out of exclusive fullscreen.
       Core::DeclareAsCPUThread();
-    }
-    else
-    {
-      scope_guard.Dismiss();
-    }
+    if (called_from_gpu_thread)
+      Core::DeclareAsGPUThread();
 
     ModalMessageBox message_box(QApplication::activeWindow(), Qt::ApplicationModal);
     message_box.setWindowTitle(QString::fromUtf8(caption));
@@ -84,7 +99,7 @@ static bool QtMsgAlertHandler(const char* caption, const char* text, bool yes_no
 
     if (button == QMessageBox::Ignore)
     {
-      Common::SetEnableAlert(false);
+      Config::SetCurrent(Config::MAIN_USE_PANIC_HANDLERS, false);
       return true;
     }
 
@@ -95,8 +110,10 @@ static bool QtMsgAlertHandler(const char* caption, const char* text, bool yes_no
   return false;
 }
 
-// N.B. On Windows, this should be called from WinMain. Link against qtmain and specify
-// /SubSystem:Windows
+#ifdef _WIN32
+#define main app_main
+#endif
+
 int main(int argc, char* argv[])
 {
 #ifdef _WIN32
@@ -108,6 +125,8 @@ int main(int argc, char* argv[])
     freopen("CONOUT$", "w", stderr);
   }
 #endif
+
+  Core::DeclareAsHostThread();
 
 #ifdef __APPLE__
   // On macOS, a command line option matching the format "-psn_X_XXXXXX" is passed when
@@ -121,28 +140,38 @@ int main(int argc, char* argv[])
   }
 #endif
 
-  auto parser = CommandLineParse::CreateParser(CommandLineParse::ParserOptions::IncludeGUIOptions);
-  const optparse::Values& options = CommandLineParse::ParseArguments(parser.get(), argc, argv);
-  const std::vector<std::string> args = parser->args();
+#ifdef __linux__
+  // Qt 6.3+ has a bug which causes mouse inputs to not be registered in our XInput2 code.
+  // If we define QT_XCB_NO_XI2, Qt's xcb platform plugin no longer initializes its XInput
+  // code, which makes mouse inputs work again.
+  // For more information: https://bugs.dolphin-emu.org/issues/12913
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 3, 0))
+  setenv("QT_XCB_NO_XI2", "1", true);
+#endif
+  // Dolphin currently doesn't work on Wayland (Only the UI does, games do not launch.) This makes
+  // XCB the default and forces it on if the platform is specified to be wayland, to prevent this
+  // from happening.
+  // For more information: https://bugs.dolphin-emu.org/issues/11807
+  const char* current_qt_platform = getenv("QT_QPA_PLATFORM");
+  const bool replace_qt_platform = current_qt_platform != nullptr &&
+                                   Common::CaseInsensitiveContains(current_qt_platform, "wayland");
+  setenv("QT_QPA_PLATFORM", "xcb", replace_qt_platform);
+#endif
 
-  QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-  QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
   QCoreApplication::setOrganizationName(QStringLiteral("Dolphin Emulator"));
   QCoreApplication::setOrganizationDomain(QStringLiteral("dolphin-emu.org"));
   QCoreApplication::setApplicationName(QStringLiteral("dolphin-emu"));
 
+  // QApplication will parse arguments and remove any it recognizes as targeting Qt
   QApplication app(argc, argv);
 
-#ifdef _WIN32
-  // On Windows, Qt 5's default system font (MS Shell Dlg 2) is outdated.
-  // Interestingly, the QMenu font is correct and comes from lfMenuFont
-  // (Segoe UI on English computers).
-  // So use it for the entire application.
-  // This code will become unnecessary and obsolete once we switch to Qt 6.
-  QApplication::setFont(QApplication::font("QMenu"));
-#endif
+  auto parser = CommandLineParse::CreateParser(CommandLineParse::ParserOptions::IncludeGUIOptions);
+  const optparse::Values& options = CommandLineParse::ParseArguments(parser.get(), argc, argv);
+  const std::vector<std::string> args = parser->args();
 
 #ifdef _WIN32
+  QtUtils::InstallWindowDecorationFilter(&app);
+
   FreeConsole();
 #endif
 
@@ -161,7 +190,7 @@ int main(int argc, char* argv[])
   // Whenever the event loop is about to go to sleep, dispatch the jobs
   // queued in the Core first.
   QObject::connect(QAbstractEventDispatcher::instance(), &QAbstractEventDispatcher::aboutToBlock,
-                   &app, &Core::HostDispatchJobs);
+                   &app, [] { Core::HostDispatchJobs(Core::System::GetInstance()); });
 
   std::optional<std::string> save_state_path;
   if (options.is_set("save_state"))
@@ -176,7 +205,8 @@ int main(int argc, char* argv[])
     const std::list<std::string> paths_list = options.all("exec");
     const std::vector<std::string> paths{std::make_move_iterator(std::begin(paths_list)),
                                          std::make_move_iterator(std::end(paths_list))};
-    boot = BootParameters::GenerateFromFile(paths, save_state_path);
+    boot = BootParameters::GenerateFromFile(
+        paths, BootSessionData(save_state_path, DeleteSavestateAfterBoot::No));
     game_specified = true;
   }
   else if (options.is_set("nand_title"))
@@ -195,7 +225,8 @@ int main(int argc, char* argv[])
   }
   else if (!args.empty())
   {
-    boot = BootParameters::GenerateFromFile(args.front(), save_state_path);
+    boot = BootParameters::GenerateFromFile(
+        args.front(), BootSessionData(save_state_path, DeleteSavestateAfterBoot::No));
     game_specified = true;
   }
 
@@ -225,53 +256,84 @@ int main(int argc, char* argv[])
   {
     DolphinAnalytics::Instance().ReportDolphinStart("qt");
 
-    MainWindow win{std::move(boot), static_cast<const char*>(options.get("movie"))};
-    if (options.is_set("debugger"))
-      Settings::Instance().SetDebugModeEnabled(true);
-    win.Show();
+    Settings::Instance().InitDefaultPalette();
+    Settings::Instance().ApplyStyle();
+
+    MainWindow win{Core::System::GetInstance(), std::move(boot),
+                   static_cast<const char*>(options.get("movie"))};
 
 #if defined(USE_ANALYTICS) && USE_ANALYTICS
-    if (!SConfig::GetInstance().m_analytics_permission_asked)
+    if (!Config::Get(Config::MAIN_ANALYTICS_PERMISSION_ASKED))
     {
-      ModalMessageBox analytics_prompt(&win);
+      // To ensure that the analytics prompt appears aligned with the center of the main window,
+      // the dialog is only shown after the application is ready, as only then it is guaranteed that
+      // the main window has been placed in its final position.
+      auto* const connection_context = new QObject(&win);
+      QObject::connect(
+          qApp, &QGuiApplication::applicationStateChanged, connection_context,
+          [connection_context, &win](const Qt::ApplicationState state) {
+            if (state != Qt::ApplicationState::ApplicationActive)
+              return;
 
-      analytics_prompt.setIcon(QMessageBox::Question);
-      analytics_prompt.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-      analytics_prompt.setWindowTitle(QObject::tr("Allow Usage Statistics Reporting"));
-      analytics_prompt.setText(
-          QObject::tr("Do you authorize Dolphin to report information to Dolphin's developers?"));
-      analytics_prompt.setInformativeText(
-          QObject::tr("If authorized, Dolphin can collect data on its performance, "
-                      "feature usage, and configuration, as well as data on your system's "
-                      "hardware and operating system.\n\n"
-                      "No private data is ever collected. This data helps us understand "
-                      "how people and emulated games use Dolphin and prioritize our "
-                      "efforts. It also helps us identify rare configurations that are "
-                      "causing bugs, performance and stability issues.\n"
-                      "This authorization can be revoked at any time through Dolphin's "
-                      "settings."));
+            // Severe the connection after the first run.
+            delete connection_context;
 
-      const int answer = analytics_prompt.exec();
+            ModalMessageBox analytics_prompt(&win);
 
-      SConfig::GetInstance().m_analytics_permission_asked = true;
-      Settings::Instance().SetAnalyticsEnabled(answer == QMessageBox::Yes);
+            analytics_prompt.setIcon(QMessageBox::Question);
+            analytics_prompt.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+            analytics_prompt.setWindowTitle(QObject::tr("Allow Usage Statistics Reporting"));
+            analytics_prompt.setText(QObject::tr(
+                "Do you authorize Dolphin to report information to Dolphin's developers?"));
+            analytics_prompt.setInformativeText(
+                QObject::tr("If authorized, Dolphin can collect data on its performance, "
+                            "feature usage, and configuration, as well as data on your system's "
+                            "hardware and operating system.\n\n"
+                            "No private data is ever collected. This data helps us understand "
+                            "how people and emulated games use Dolphin and prioritize our "
+                            "efforts. It also helps us identify rare configurations that are "
+                            "causing bugs, performance and stability issues.\n"
+                            "This authorization can be revoked at any time through Dolphin's "
+                            "settings."));
 
-      DolphinAnalytics::Instance().ReloadConfig();
+            const int answer = analytics_prompt.exec();
+
+            Config::SetBase(Config::MAIN_ANALYTICS_PERMISSION_ASKED, true);
+            Settings::Instance().SetAnalyticsEnabled(answer == QMessageBox::Yes);
+
+            DolphinAnalytics::Instance().ReloadConfig();
+          });
     }
 #endif
 
     if (!Settings::Instance().IsBatchModeEnabled())
     {
-      auto* updater = new Updater(&win);
+      auto* updater = new Updater(&win, Config::Get(Config::MAIN_AUTOUPDATE_UPDATE_TRACK),
+                                  Config::Get(Config::MAIN_AUTOUPDATE_HASH_OVERRIDE));
       updater->start();
     }
 
     retval = app.exec();
   }
 
-  Core::Shutdown();
+  Core::Shutdown(Core::System::GetInstance());
   UICommon::Shutdown();
   Host::GetInstance()->deleteLater();
 
   return retval;
 }
+
+#ifdef _WIN32
+int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
+{
+  std::vector<std::string> args = Common::CommandLineToUtf8Argv(GetCommandLineW());
+  const int argc = static_cast<int>(args.size());
+  std::vector<char*> argv(args.size());
+  for (size_t i = 0; i < args.size(); ++i)
+    argv[i] = args[i].data();
+
+  return main(argc, argv.data());
+}
+
+#undef main
+#endif

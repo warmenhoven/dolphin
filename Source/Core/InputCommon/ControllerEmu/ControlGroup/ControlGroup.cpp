@@ -1,23 +1,21 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "InputCommon/ControllerEmu/ControlGroup/ControlGroup.h"
 
-#include "Common/CommonTypes.h"
 #include "Common/IniFile.h"
 
 #include "InputCommon/ControlReference/ControlReference.h"
 #include "InputCommon/ControllerEmu/Control/Input.h"
 #include "InputCommon/ControllerEmu/Control/Output.h"
-#include "InputCommon/ControllerEmu/ControlGroup/Attachments.h"
 #include "InputCommon/ControllerEmu/ControllerEmu.h"
 #include "InputCommon/ControllerEmu/Setting/NumericSetting.h"
 
 namespace ControllerEmu
 {
-ControlGroup::ControlGroup(std::string name_, const GroupType type_, DefaultValue default_value_)
-    : name(name_), ui_name(std::move(name_)), type(type_), default_value(default_value_)
+ControlGroup::ControlGroup(const std::string& name_, const GroupType type_,
+                           DefaultValue default_value_)
+    : ControlGroup{name_, name_, type_, default_value_}
 {
 }
 
@@ -26,6 +24,22 @@ ControlGroup::ControlGroup(std::string name_, std::string ui_name_, const GroupT
     : name(std::move(name_)), ui_name(std::move(ui_name_)), type(type_),
       default_value(default_value_)
 {
+  if (default_value_ != DefaultValue::AlwaysEnabled)
+  {
+    enabled_setting = std::make_unique<NumericSetting<bool>>(
+        &enabled, NumericSettingDetails{_trans("Enabled")},
+        (default_value_ == DefaultValue::Enabled), false, true);
+  }
+}
+
+void ControlGroup::AddVirtualNotchSetting(SettingValue<double>* value, double max_virtual_notch_deg)
+{
+  AddSetting(value,
+             {_trans("Virtual Notches"),
+              // i18n: The degrees symbol.
+              _trans("°"), _trans("Snap the thumbstick position to the nearest octagonal axis."),
+              nullptr, SettingVisibility::Advanced},
+             0, 0, max_virtual_notch_deg);
 }
 
 void ControlGroup::AddDeadzoneSetting(SettingValue<double>* value, double maximum_deadzone)
@@ -35,20 +49,19 @@ void ControlGroup::AddDeadzoneSetting(SettingValue<double>* value, double maximu
               // i18n: The percent symbol.
               _trans("%"),
               // i18n: Refers to the dead-zone setting of gamepad inputs.
-              _trans("Input strength to ignore.")},
+              _trans("Input strength to ignore and remap.")},
              0, 0, maximum_deadzone);
 }
 
 ControlGroup::~ControlGroup() = default;
 
-void ControlGroup::LoadConfig(IniFile::Section* sec, const std::string& defdev,
-                              const std::string& base)
+void ControlGroup::LoadConfig(Common::IniFile::Section* sec, const std::string& base)
 {
   const std::string group(base + name + "/");
 
   // enabled
-  if (default_value != DefaultValue::AlwaysEnabled)
-    sec->Get(group + "Enabled", &enabled, default_value == DefaultValue::Enabled);
+  if (HasEnabledSetting())
+    enabled_setting->LoadFromIni(*sec, group);
 
   for (auto& setting : numeric_settings)
     setting->LoadFromIni(*sec, group);
@@ -66,41 +79,15 @@ void ControlGroup::LoadConfig(IniFile::Section* sec, const std::string& defdev,
     sec->Get(group + c->name + "/Range", &c->control_ref->range, 100.0);
     c->control_ref->range /= 100;
   }
-
-  // extensions
-  if (type == GroupType::Attachments)
-  {
-    auto* const ext = static_cast<Attachments*>(this);
-
-    ext->SetSelectedAttachment(0);
-    u32 n = 0;
-    std::string attachment_text;
-    sec->Get(base + name, &attachment_text, "");
-
-    // First assume attachment string is a valid expression.
-    // If it instead matches one of the names of our attachments it is overridden below.
-    ext->GetSelectionSetting().GetInputReference().SetExpression(attachment_text);
-
-    for (auto& ai : ext->GetAttachmentList())
-    {
-      ai->SetDefaultDevice(defdev);
-      ai->LoadConfig(sec, base + ai->GetName() + "/");
-
-      if (ai->GetName() == attachment_text)
-        ext->SetSelectedAttachment(n);
-
-      n++;
-    }
-  }
 }
 
-void ControlGroup::SaveConfig(IniFile::Section* sec, const std::string& defdev,
-                              const std::string& base)
+void ControlGroup::SaveConfig(Common::IniFile::Section* sec, const std::string& base)
 {
   const std::string group(base + name + "/");
 
   // enabled
-  sec->Set(group + "Enabled", enabled, true);
+  if (HasEnabledSetting())
+    enabled_setting->SaveToIni(*sec, group);
 
   for (auto& setting : numeric_settings)
     setting->SaveToIni(*sec, group);
@@ -108,30 +95,26 @@ void ControlGroup::SaveConfig(IniFile::Section* sec, const std::string& defdev,
   for (auto& c : controls)
   {
     // control expression
-    sec->Set(group + c->name, c->control_ref->GetExpression(), "");
+    std::string expression = c->control_ref->GetExpression();
+    // We can't save line breaks in a single line config. Restoring them is too complicated.
+    ReplaceBreaksWithSpaces(expression);
+    sec->Set(group + c->name, expression, "");
 
     // range
     sec->Set(group + c->name + "/Range", c->control_ref->range * 100.0, 100.0);
   }
+}
 
-  // extensions
-  if (type == GroupType::Attachments)
-  {
-    auto* const ext = static_cast<Attachments*>(this);
+void ControlGroup::UpdateReferences(ciface::ExpressionParser::ControlEnvironment& env)
+{
+  if (HasEnabledSetting())
+    enabled_setting->GetInputReference().UpdateReference(env);
 
-    if (ext->GetSelectionSetting().IsSimpleValue())
-    {
-      sec->Set(base + name, ext->GetAttachmentList()[ext->GetSelectedAttachment()]->GetName(),
-               "None");
-    }
-    else
-    {
-      sec->Set(base + name, ext->GetSelectionSetting().GetInputReference().GetExpression(), "None");
-    }
+  for (auto& control : controls)
+    control->control_ref->UpdateReference(env);
 
-    for (auto& ai : ext->GetAttachmentList())
-      ai->SaveConfig(sec, base + ai->GetName() + "/");
-  }
+  for (auto& setting : numeric_settings)
+    setting->GetInputReference().UpdateReference(env);
 }
 
 void ControlGroup::SetControlExpression(int index, const std::string& expression)
@@ -152,6 +135,11 @@ void ControlGroup::AddInput(Translatability translate, std::string name_, std::s
 void ControlGroup::AddOutput(Translatability translate, std::string name_)
 {
   controls.emplace_back(std::make_unique<Output>(translate, std::move(name_)));
+}
+
+bool ControlGroup::HasEnabledSetting() const
+{
+  return enabled_setting != nullptr;
 }
 
 }  // namespace ControllerEmu
