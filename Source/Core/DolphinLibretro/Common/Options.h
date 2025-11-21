@@ -182,6 +182,7 @@ namespace gfx_hardware {
 namespace gfx_settings {
   constexpr const char RENDERER[] = "dolphin_renderer";
   constexpr const char WIDESCREEN_HACK[] = "dolphin_widescreen_hack";
+  constexpr const char CROP_OVERSCAN[] = "dolphin_crop_overscan";
   constexpr const char EFB_SCALE[] = "dolphin_efb_scale";
   constexpr const char SHADER_COMPILATION_MODE[] = "dolphin_shader_compilation_mode";
   constexpr const char WAIT_FOR_SHADERS[] = "dolphin_wait_for_shaders";

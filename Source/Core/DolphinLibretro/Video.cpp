@@ -65,6 +65,17 @@ static Common::DynamicLibrary d3d11_library;
 static Common::DynamicLibrary d3d12_library;
 #endif
 
+static int GetAdjustedBaseHeight()
+{
+  const bool crop_overscan = Libretro::Options::GetCached<bool>(
+    Libretro::Options::gfx_settings::CROP_OVERSCAN);
+
+  if (crop_overscan && retro_get_region() == RETRO_REGION_NTSC)
+    return 480;
+
+  return EFB_HEIGHT;
+}
+
 void Init()
 {
   DEBUG_LOG_FMT(VIDEO, "Video - Init");
@@ -239,7 +250,7 @@ void ContextReset(void)
     int efbScale = Libretro::Options::GetCached<int>(
       Libretro::Options::gfx_settings::EFB_SCALE, 1);
     Vk::SetSurfaceSize(EFB_WIDTH * efbScale,
-                       EFB_HEIGHT * efbScale);
+                       GetAdjustedBaseHeight() * efbScale);
   }
 #endif
 
@@ -296,7 +307,7 @@ void ContextReset(void)
     UpdateActiveConfig();
 
     std::unique_ptr<DX11SwapChain> swap_chain = std::make_unique<DX11SwapChain>(
-      wsi, EFB_WIDTH * efbScale, EFB_HEIGHT * efbScale,
+      wsi, EFB_WIDTH * efbScale, GetAdjustedBaseHeight() * efbScale,
       nullptr, nullptr);
 
     auto gfx = std::make_unique<DX11::Gfx>(std::move(swap_chain), wsi.render_surface_scale);
@@ -373,7 +384,7 @@ void ContextReset(void)
     UpdateActiveConfig();
 
     auto swap_chain = std::make_unique<DX12SwapChain>(
-        wsi, EFB_WIDTH * efbScale, EFB_HEIGHT * efbScale, d3d12);
+        wsi, EFB_WIDTH * efbScale, GetAdjustedBaseHeight() * efbScale, d3d12);
 
     if (!swap_chain->Initialize())
     {

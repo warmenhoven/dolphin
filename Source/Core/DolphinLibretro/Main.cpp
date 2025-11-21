@@ -102,8 +102,15 @@ void retro_get_system_av_info(retro_system_av_info* info)
   int efbScale = Libretro::Options::GetCached<int>(
     Libretro::Options::gfx_settings::EFB_SCALE);
 
+  int base_height = EFB_HEIGHT;
+  const bool crop_overscan = Libretro::Options::GetCached<bool>(
+    Libretro::Options::gfx_settings::CROP_OVERSCAN);
+
+  if (crop_overscan && retro_get_region() == RETRO_REGION_NTSC)
+    base_height = 480;
+
   info->geometry.base_width  = EFB_WIDTH * efbScale;
-  info->geometry.base_height = EFB_HEIGHT * efbScale;
+  info->geometry.base_height = base_height * efbScale;
 
   info->geometry.max_width   = info->geometry.base_width;
   info->geometry.max_height  = info->geometry.base_height;
@@ -141,6 +148,14 @@ void retro_run(void)
   Config::SetCurrent(Config::MAIN_OVERCLOCK_ENABLE, cpuClock != 1.0);
   g_Config.bWidescreenHack = Libretro::Options::GetCached<bool>(
     Libretro::Options::gfx_settings::WIDESCREEN_HACK);
+
+  const bool crop_overscan = Libretro::Options::GetCached<bool>(
+    Libretro::Options::gfx_settings::CROP_OVERSCAN);
+
+  if (crop_overscan && retro_get_region() == RETRO_REGION_NTSC)
+    g_Config.bCrop = true;
+  else
+    g_Config.bCrop = false;
 
   Libretro::Input::Update();
 

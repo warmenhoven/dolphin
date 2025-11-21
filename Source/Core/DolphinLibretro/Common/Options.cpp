@@ -564,6 +564,20 @@ static struct retro_core_option_v2_definition option_defs[] = {
     "disabled"
   },
   {
+    Libretro::Options::gfx_settings::CROP_OVERSCAN,
+    "Graphics > Settings > Crop Overscan",
+    "Crop Overscan",
+    "Crop overscan to match standard NTSC output resolutions. Recommended for NTSC CRTs.",
+    nullptr,
+    CATEGORY_GFX_SETTINGS,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr, nullptr }
+    },
+    "disabled"
+  },
+  {
     Libretro::Options::gfx_settings::EFB_SCALE,
     "Graphics > Settings > Internal Resolution",
     "Internal Resolution",
