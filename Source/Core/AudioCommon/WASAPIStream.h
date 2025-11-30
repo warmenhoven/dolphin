@@ -9,6 +9,9 @@
 #include <windows.h>
 #include <mmreg.h>
 #include <objbase.h>
+#ifdef __MINGW32__
+#include "Common/WILShim.h"
+#endi
 #include <wil/resource.h>
 // clang-format on
 
