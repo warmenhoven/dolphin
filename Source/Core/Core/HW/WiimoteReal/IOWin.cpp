@@ -158,9 +158,7 @@ static std::optional<std::string> GetParentDeviceDescription(const WCHAR* hid_if
   return std::nullopt;
 }
 
-template <typename F>
-requires std::is_invocable_r_v<WiimoteReal::EnumerationControl, F, HANDLE>
-void EnumerateRadios(F&& enumeration_callback)
+void EnumerateRadios(std::invocable<HANDLE> auto&& enumeration_callback)
 {
   constexpr BLUETOOTH_FIND_RADIO_PARAMS radio_params{
       .dwSize = sizeof(radio_params),
