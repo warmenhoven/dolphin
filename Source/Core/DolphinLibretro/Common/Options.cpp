@@ -1760,6 +1760,20 @@ static struct retro_core_option_v2_definition option_defs[] = {
     "disabled"
   },
 #endif  // HAS_OPENGL/__WEBOS__
+  {
+    Libretro::Options::retroarch_core::ENABLE_LIBRETRO_VFS,
+    "RetroArch core > Enable Virtual File System (VFS)",
+    "Enable Virtual File System (VFS)",
+    "Enable VFS for SAF/SMB etc. Requires core RESTART. This feature is NEW and EXPERIMENTAL. Backup your saves regularly.",
+    nullptr,
+    CATEGORY_RETROARCH_CORE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr, nullptr }
+    },
+    "disabled"
+  },
 
   { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, {{0}}, nullptr }
 };

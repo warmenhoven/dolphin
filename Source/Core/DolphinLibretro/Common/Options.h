@@ -317,6 +317,9 @@ namespace retroarch_core {
   constexpr const char SUPPORTS_COPY_SUB_IMAGE[] = "dolphin_supports_copy_sub_image";
   constexpr const char SUPPORTS_GL_BASE_VERTEX[] = "dolphin_supports_gl_base_vertex";
 #endif
+
+  constexpr const char ENABLE_LIBRETRO_VFS[] = "dolphin_libretro_vfs_enabled";
+
 }  // namespace wiimote
 
 }  // namespace Options
