@@ -12,14 +12,15 @@
 #include <iomanip>
 #include <limits>
 #include <locale>
+#include <ranges>
 #include <span>
 #include <sstream>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "Common/CommonTypes.h"
-#include "Common/EnumUtils.h"
 #include "Common/TypeUtils.h"
 
 std::string StringFromFormatV(const char* format, va_list args);
@@ -157,7 +158,7 @@ std::string ValueToString(s64 value);
 std::string ValueToString(bool value);
 std::string ValueToString(Common::Enum auto value)
 {
-  return ValueToString(Common::ToUnderlying(value));
+  return ValueToString(std::to_underlying(value));
 }
 
 // Generates an hexdump-like representation of a binary data blob.
@@ -181,6 +182,32 @@ std::from_chars_result FromChars(std::string_view sv, std::floating_point auto& 
 }  // namespace Common
 
 std::vector<std::string> SplitString(const std::string& str, char delim);
+
+// Returns `nullopt` if subject does not contain exactly (Count - 1) delim.
+template <std::size_t Count>
+requires(Count > 1)
+std::optional<std::array<std::string_view, Count>> SplitStringIntoArray(std::string_view subject,
+                                                                        char delim)
+{
+  std::optional<std::array<std::string_view, Count>> result;
+  result.emplace();
+
+  std::size_t index = 0;
+  for (auto&& item : subject | std::views::split(delim))
+  {
+    // Too many delim.
+    if (index == Count)
+      return std::nullopt;
+
+    (*result)[index++] = std::string_view{item};
+  }
+
+  // Too few delim.
+  if (index != Count)
+    return std::nullopt;
+
+  return result;
+}
 
 // "C:/Windows/winhelp.exe" to "C:/Windows/", "winhelp", ".exe"
 // This requires forward slashes to be used for the path separators, even on Windows.
@@ -314,7 +341,7 @@ bool CaseInsensitiveContains(std::string_view haystack, std::string_view needle)
 // 'std::less'-like comparison function object type for case-insensitive strings.
 struct CaseInsensitiveLess
 {
-  using is_transparent = void;  // Allow heterogenous lookup.
+  using is_transparent = void;  // Allow heterogeneous lookup.
   bool operator()(std::string_view a, std::string_view b) const;
 };
 
