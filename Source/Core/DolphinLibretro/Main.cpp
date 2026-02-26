@@ -10,6 +10,7 @@
 #include "Common/GL/GLContext.h"
 #include "Common/Logging/LogManager.h"
 #include "Common/Thread.h"
+#include "Common/scmrev.h"
 #include "Common/Version.h"
 #include "Core/BootManager.h"
 #include "Core/Config/MainSettings.h"
@@ -89,9 +90,34 @@ void retro_deinit(void)
 
 void retro_get_system_info(retro_system_info* info)
 {
+  // Build a semver string from SCM_DESC_STR (e.g. "2512-226" -> "2512.0.226")
+  // with the short git hash as build metadata (e.g. "+13192dec3d")
+  static std::string version_str = []() {
+    std::string desc = SCM_DESC_STR;
+    std::string major, commits;
+    auto dash = desc.find('-');
+    if (dash != std::string::npos)
+    {
+      major = desc.substr(0, dash);
+      auto dash2 = desc.find('-', dash + 1);
+      commits = (dash2 != std::string::npos)
+                    ? desc.substr(dash + 1, dash2 - dash - 1)
+                    : desc.substr(dash + 1);
+    }
+    else
+    {
+      major = desc;
+      commits = "0";
+    }
+    std::string hash = SCM_REV_STR;
+    if (hash.size() > 10)
+      hash = hash.substr(0, 10);
+    return major + ".0." + commits + "+" + hash;
+  }();
+
   info->need_fullpath = true;
   info->valid_extensions = "elf|dol|gcm|iso|tgc|wbfs|ciso|gcz|wad|wia|rvz|m3u";
-  info->library_version = Common::GetScmDescStr().c_str();
+  info->library_version = version_str.c_str();
   info->library_name = "dolphin-emu";
   info->block_extract = true;
 }
@@ -192,6 +218,33 @@ void retro_run(void)
 
     while (!Core::IsRunningOrStarting(Core::System::GetInstance()))
       Common::SleepCurrentThread(100);
+
+    // Expose memory layout to RetroArch for RetroAchievements.
+    // rcheevos matches descriptors by real_address from its console region
+    // definitions: GameCube MEM1 at 0x80000000, Wii MEM2 at 0x90000000.
+    // Without this, the unmapped fallback hits a disjoint-memory heuristic
+    // that null-fills MEM2, breaking Wii achievements entirely.
+    {
+      auto& memory = system.GetMemory();
+      struct retro_memory_descriptor descs[2] = {};
+      unsigned num_descs = 0;
+
+      descs[num_descs].ptr   = memory.GetRAM();
+      descs[num_descs].start = 0x80000000;
+      descs[num_descs].len   = memory.GetRamSizeReal();
+      num_descs++;
+
+      if (system.IsWii())
+      {
+        descs[num_descs].ptr   = memory.GetEXRAM();
+        descs[num_descs].start = 0x90000000;
+        descs[num_descs].len   = memory.GetExRamSizeReal();
+        num_descs++;
+      }
+
+      struct retro_memory_map mmap = {descs, num_descs};
+      Libretro::environ_cb(RETRO_ENVIRONMENT_SET_MEMORY_MAPS, &mmap);
+    }
   }
 
   if(!Libretro::g_emuthread_launched)
@@ -350,19 +403,17 @@ unsigned retro_api_version()
 
 size_t retro_get_memory_size(unsigned id)
 {
+  auto& memory = Core::System::GetInstance().GetMemory();
   if (id == RETRO_MEMORY_SYSTEM_RAM)
-  {
-    return Core::System::GetInstance().GetMemory().GetRamSize();
-  }
+    return memory.GetRamSizeReal();
   return 0;
 }
 
 void* retro_get_memory_data(unsigned id)
 {
+  auto& memory = Core::System::GetInstance().GetMemory();
   if (id == RETRO_MEMORY_SYSTEM_RAM)
-  {
-    return Core::System::GetInstance().GetMemory().GetRAM();
-  }
+    return memory.GetRAM();
   return NULL;
 }
 
