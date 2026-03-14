@@ -692,6 +692,25 @@ static struct retro_core_option_v2_definition option_defs[] = {
     "disabled"
   },
   {
+    Libretro::Options::gfx_settings::ASPECT_RATIO,
+    "Graphics > Settings > Aspect Ratio",
+    "Aspect Ratio",
+    "Control how the game's image is scaled.",
+    nullptr,
+    CATEGORY_GFX_SETTINGS,
+    {
+      { "0", "Auto" },            // ~4:3 or ~16:9 (auto detected)
+      { "1", "Force Wide" },      // ~16:9
+      { "2", "Force Standard" },  // ~4:3
+      { "3", "Stretch" },
+      { "4", "Custom" },          // Forced relative custom AR
+      { "5", "Custom Stretch" },  // Forced absolute custom AR
+      { "6", "Raw" },             // Forced squared pixels
+      { nullptr, nullptr }
+    },
+    "3"
+  },
+  {
     Libretro::Options::gfx_settings::CROP_OVERSCAN,
     "Graphics > Settings > Crop Overscan",
     "Crop Overscan",
