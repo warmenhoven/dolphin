@@ -9,7 +9,7 @@
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
     CORENAME: dolphin
-    CORE_ARGS: -DLIBRETRO=ON
+    CORE_ARGS: -DLIBRETRO=ON -DENABLE_LTO=ON
     
 # Inclusion templates, required for the build to work
 include:
