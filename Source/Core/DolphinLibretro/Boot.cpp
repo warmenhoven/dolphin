@@ -258,8 +258,12 @@ bool retro_load_game(const struct retro_game_info* game)
                     Libretro::GetOption<int>(
                       gfx_settings::SHADER_COMPILATION_MODE,
                       static_cast<int>(ShaderCompilationMode::Synchronous))));
+
   Config::SetBase(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING,
-                 Libretro::GetOption<bool>(gfx_settings::WAIT_FOR_SHADERS, /*def=*/false));
+    Libretro::GetOption<bool>(gfx_settings::WAIT_FOR_SHADERS, /*def=*/false));
+
+  if (Common::is_uwp())
+    Config::SetBase(Config::GFX_SHADER_CACHE, false);
 
   // Graphics.Enhancements
   Config::SetBase(Config::GFX_ENHANCE_FORCE_TEXTURE_FILTERING,

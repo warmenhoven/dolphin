@@ -206,7 +206,7 @@ if (APPLE)
     ${COREFOUNDATION_LIBRARY}
     ${IOK_LIBRARY}
   )
-elseif(WIN32)
+elseif(WIN32 AND NOT LIBRETRO)
   target_link_libraries(common
   PRIVATE
     kernel32.lib
@@ -319,12 +319,16 @@ endif()
 
 if(WIN32)
   target_sources(common PRIVATE
-    GL/GLInterface/WGL.cpp
-    GL/GLInterface/WGL.h
+    WindowsRegistry.cpp
     WindowsDevice.cpp
     WindowsDevice.h
-    WindowsRegistry.cpp
   )
+  if(NOT LIBRETRO)
+    target_sources(common PRIVATE
+      GL/GLInterface/WGL.cpp
+      GL/GLInterface/WGL.h
+    )
+  endif()
   if(MSVC)
     target_sources(common PRIVATE
       CompatPatches.cpp

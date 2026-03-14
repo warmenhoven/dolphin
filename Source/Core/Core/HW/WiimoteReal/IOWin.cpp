@@ -12,9 +12,9 @@
 #include <windows.h>
 #include <bluetoothapis.h>
 #include <cfgmgr32.h>
+#include <initguid.h>
 #include <hidclass.h>
 #include <hidsdi.h>
-#include <initguid.h>
 #include <wtypes.h>
 // initguid.h must be included before devpkey.h
 #include <devpkey.h>
@@ -23,6 +23,7 @@
 
 #include "Common/CommonFuncs.h"
 #include "Common/CommonTypes.h"
+#include "Common/DynamicLibrary.h"
 #include "Common/Logging/Log.h"
 #include "Common/Network.h"
 #include "Common/ScopeGuard.h"
@@ -32,6 +33,175 @@
 #include "Core/HW/WiimoteCommon/DataReport.h"
 #include "Core/HW/WiimoteCommon/WiimoteConstants.h"
 #include "Core/HW/WiimoteCommon/WiimoteReport.h"
+
+// Create func_t function pointer type and declare a nullptr-initialized static variable of that
+// type named "pfunc".
+#define DYN_FUNC_DECLARE(func)                                                                     \
+  typedef decltype(&func) func##_t;                                                                \
+  static func##_t p##func = nullptr;
+
+DYN_FUNC_DECLARE(HidD_GetAttributes);
+DYN_FUNC_DECLARE(HidD_GetHidGuid);
+DYN_FUNC_DECLARE(HidD_SetOutputReport);
+DYN_FUNC_DECLARE(HidD_GetProductString);
+
+#pragma warning(push)
+#pragma warning(disable : 4995)
+DYN_FUNC_DECLARE(BluetoothAuthenticateDevice);
+#pragma warning(pop)
+DYN_FUNC_DECLARE(BluetoothAuthenticateDeviceEx);
+DYN_FUNC_DECLARE(BluetoothFindDeviceClose);
+DYN_FUNC_DECLARE(BluetoothFindFirstDevice);
+DYN_FUNC_DECLARE(BluetoothFindFirstRadio);
+DYN_FUNC_DECLARE(BluetoothFindNextDevice);
+DYN_FUNC_DECLARE(BluetoothFindNextRadio);
+DYN_FUNC_DECLARE(BluetoothFindRadioClose);
+DYN_FUNC_DECLARE(BluetoothGetRadioInfo);
+DYN_FUNC_DECLARE(BluetoothRemoveDevice);
+DYN_FUNC_DECLARE(BluetoothSetServiceState);
+DYN_FUNC_DECLARE(BluetoothEnumerateInstalledServices);
+
+#undef DYN_FUNC_DECLARE
+
+namespace
+{
+HINSTANCE s_hid_lib = nullptr;
+HINSTANCE s_bthprops_lib = nullptr;
+
+bool s_loaded_ok = false;
+
+std::unordered_map<BTH_ADDR, std::time_t> s_connect_times;
+
+#define DYN_FUNC_UNLOAD(func) p##func = nullptr;
+
+// Attempt to load the function from the given module handle.
+#define DYN_FUNC_LOAD(module, func)                                                                \
+  p##func = (func##_t)::GetProcAddress(module, #func);                                             \
+  if (!p##func)                                                                                    \
+  {                                                                                                \
+    return false;                                                                                  \
+  }
+
+bool load_hid()
+{
+  auto loader = [&] {
+    s_hid_lib = ::LoadLibrary(_T("hid.dll"));
+    if (!s_hid_lib)
+    {
+      return false;
+    }
+
+    DYN_FUNC_LOAD(s_hid_lib, HidD_GetHidGuid);
+    DYN_FUNC_LOAD(s_hid_lib, HidD_GetAttributes);
+    DYN_FUNC_LOAD(s_hid_lib, HidD_SetOutputReport);
+    DYN_FUNC_LOAD(s_hid_lib, HidD_GetProductString);
+
+    return true;
+  };
+
+  bool loaded_ok = loader();
+
+  if (!loaded_ok)
+  {
+    DYN_FUNC_UNLOAD(HidD_GetHidGuid);
+    DYN_FUNC_UNLOAD(HidD_GetAttributes);
+    DYN_FUNC_UNLOAD(HidD_SetOutputReport);
+    DYN_FUNC_UNLOAD(HidD_GetProductString);
+
+    if (s_hid_lib)
+    {
+      ::FreeLibrary(s_hid_lib);
+      s_hid_lib = nullptr;
+    }
+  }
+
+  return loaded_ok;
+}
+
+bool load_bthprops()
+{
+  auto loader = [&] {
+    s_bthprops_lib = ::LoadLibrary(_T("bthprops.cpl"));
+    if (!s_bthprops_lib)
+    {
+      return false;
+    }
+
+    DYN_FUNC_LOAD(s_bthprops_lib, BluetoothFindDeviceClose);
+    DYN_FUNC_LOAD(s_bthprops_lib, BluetoothFindFirstDevice);
+    DYN_FUNC_LOAD(s_bthprops_lib, BluetoothFindFirstRadio);
+    DYN_FUNC_LOAD(s_bthprops_lib, BluetoothFindNextDevice);
+    DYN_FUNC_LOAD(s_bthprops_lib, BluetoothFindNextRadio);
+    DYN_FUNC_LOAD(s_bthprops_lib, BluetoothFindRadioClose);
+    DYN_FUNC_LOAD(s_bthprops_lib, BluetoothGetRadioInfo);
+    DYN_FUNC_LOAD(s_bthprops_lib, BluetoothRemoveDevice);
+    DYN_FUNC_LOAD(s_bthprops_lib, BluetoothSetServiceState);
+    DYN_FUNC_LOAD(s_bthprops_lib, BluetoothAuthenticateDevice);
+    DYN_FUNC_LOAD(s_bthprops_lib, BluetoothAuthenticateDeviceEx);
+    DYN_FUNC_LOAD(s_bthprops_lib, BluetoothEnumerateInstalledServices);
+
+    return true;
+  };
+
+  bool loaded_ok = loader();
+
+  if (!loaded_ok)
+  {
+    DYN_FUNC_UNLOAD(BluetoothFindDeviceClose);
+    DYN_FUNC_UNLOAD(BluetoothFindFirstDevice);
+    DYN_FUNC_UNLOAD(BluetoothFindFirstRadio);
+    DYN_FUNC_UNLOAD(BluetoothFindNextDevice);
+    DYN_FUNC_UNLOAD(BluetoothFindNextRadio);
+    DYN_FUNC_UNLOAD(BluetoothFindRadioClose);
+    DYN_FUNC_UNLOAD(BluetoothGetRadioInfo);
+    DYN_FUNC_UNLOAD(BluetoothRemoveDevice);
+    DYN_FUNC_UNLOAD(BluetoothSetServiceState);
+    DYN_FUNC_UNLOAD(BluetoothAuthenticateDeviceEx);
+    DYN_FUNC_UNLOAD(BluetoothEnumerateInstalledServices);
+
+    if (s_bthprops_lib)
+    {
+      ::FreeLibrary(s_bthprops_lib);
+      s_bthprops_lib = nullptr;
+    }
+  }
+
+  return loaded_ok;
+}
+
+#undef DYN_FUNC_LOAD
+#undef DYN_FUNC_UNLOAD
+
+void init_lib()
+{
+  if (Common::is_uwp())
+    return;
+
+  static bool initialized = false;
+  static Common::DynamicLibrary bt_api_lib;
+
+  if (!initialized)
+  {
+    // Only try once
+    initialized = true;
+
+    // After these calls, we know all dynamically loaded APIs will either all be valid or
+    // all nullptr.
+    if (!load_hid() || !load_bthprops())
+    {
+      NOTICE_LOG_FMT(WIIMOTE,
+                     "Failed to load Bluetooth support libraries, Wiimotes will not function");
+      return;
+    }
+
+    // Try to incref on this dll to prevent it being reloaded continuously (caused by
+    // BluetoothFindFirstRadio)
+    bt_api_lib.Open("BluetoothApis.dll");
+
+    s_loaded_ok = true;
+  }
+}
+}  // Anonymous namespace
 
 #pragma comment(lib, "Bthprops.lib")
 
@@ -79,6 +249,9 @@ static bool AuthenticateWiimote(HANDLE radio_handle, const BLUETOOTH_RADIO_INFO&
                                 BLUETOOTH_DEVICE_INFO_STRUCT* btdi,
                                 AuthenticationMethod auth_method)
 {
+  if (!s_loaded_ok)
+    return false;
+
   // When pressing the sync button, the remote expects the host's address as the pass key.
   // When pressing 1+2 it expects its own address.
   // I'm not sure if there is a convenient way to determine which one the remote wants?
@@ -90,7 +263,7 @@ static bool AuthenticateWiimote(HANDLE radio_handle, const BLUETOOTH_RADIO_INFO&
   std::array<WCHAR, sizeof(bdaddr_to_use.rgBytes)> pass_key;
   std::ranges::copy(bdaddr_to_use.rgBytes, pass_key.data());
 
-  const DWORD auth_result = BluetoothAuthenticateDevice(nullptr, radio_handle, btdi,
+  const DWORD auth_result = pBluetoothAuthenticateDevice(nullptr, radio_handle, btdi,
                                                         pass_key.data(), ULONG(pass_key.size()));
   if (ERROR_SUCCESS != auth_result)
   {
@@ -102,7 +275,7 @@ static bool AuthenticateWiimote(HANDLE radio_handle, const BLUETOOTH_RADIO_INFO&
   // Apparently must be done to make the remote remember the pairing.
   DWORD pc_services{};
   const DWORD services_result =
-      BluetoothEnumerateInstalledServices(radio_handle, btdi, &pc_services, nullptr);
+      pBluetoothEnumerateInstalledServices(radio_handle, btdi, &pc_services, nullptr);
   if (services_result != ERROR_SUCCESS && services_result != ERROR_MORE_DATA)
   {
     ERROR_LOG_FMT(WIIMOTE, "BluetoothEnumerateInstalledServices failed: {}", services_result);
@@ -115,6 +288,9 @@ static bool AuthenticateWiimote(HANDLE radio_handle, const BLUETOOTH_RADIO_INFO&
 
 static std::optional<USBUtils::DeviceInfo> GetDeviceInfo(const WCHAR* hid_iface)
 {
+  if (!s_loaded_ok)
+    return std::nullopt;
+
   // libusb opens without read/write access to get attributes, so we'll do that too.
   constexpr auto open_access = 0;
   constexpr auto open_flags = FILE_SHARE_READ | FILE_SHARE_WRITE;
@@ -127,7 +303,7 @@ static std::optional<USBUtils::DeviceInfo> GetDeviceInfo(const WCHAR* hid_iface)
   }
 
   HIDD_ATTRIBUTES attributes{.Size = sizeof(attributes)};
-  if (!HidD_GetAttributes(dev_handle, &attributes))
+  if (!pHidD_GetAttributes(dev_handle, &attributes))
   {
     ERROR_LOG_FMT(WIIMOTE, "HidD_GetAttributes");
     return std::nullopt;
@@ -201,18 +377,21 @@ static std::optional<std::string> GetBluetoothName(DEVINST dev_inst)
 
 void EnumerateRadios(std::invocable<HANDLE> auto&& enumeration_callback)
 {
+  if (!s_loaded_ok)
+    return;
+
   constexpr BLUETOOTH_FIND_RADIO_PARAMS radio_params{
       .dwSize = sizeof(radio_params),
   };
 
   HANDLE radio_handle{};
-  const auto find_radio = BluetoothFindFirstRadio(&radio_params, &radio_handle);
+  const auto find_radio = pBluetoothFindFirstRadio(&radio_params, &radio_handle);
   if (find_radio == nullptr)
   {
     ERROR_LOG_FMT(WIIMOTE, "BluetoothFindFirstRadio: {}", Common::GetLastErrorString());
     return;
   }
-  Common::ScopeGuard find_guard([=] { BluetoothFindRadioClose(find_radio); });
+  Common::ScopeGuard find_guard([=] { pBluetoothFindRadioClose(find_radio); });
 
   while (true)
   {
@@ -221,7 +400,7 @@ void EnumerateRadios(std::invocable<HANDLE> auto&& enumeration_callback)
     if (std::invoke(enumeration_callback, radio_handle) == EnumerationControl::Stop)
       break;
 
-    if (!BluetoothFindNextRadio(find_radio, &radio_handle))
+    if (!pBluetoothFindNextRadio(find_radio, &radio_handle))
       break;
   }
 }
@@ -229,6 +408,9 @@ void EnumerateRadios(std::invocable<HANDLE> auto&& enumeration_callback)
 // Use inquiry_length of 0 to enumerate known devices.
 void EnumerateBluetoothDevices(u8 inquiry_length, auto&& enumeration_callback)
 {
+  if (!s_loaded_ok)
+    return;
+
   BLUETOOTH_DEVICE_SEARCH_PARAMS search_params{
       .dwSize = sizeof(search_params),
       .fReturnAuthenticated = true,
@@ -241,7 +423,7 @@ void EnumerateBluetoothDevices(u8 inquiry_length, auto&& enumeration_callback)
 
   EnumerateRadios([&](HANDLE radio_handle) {
     BLUETOOTH_RADIO_INFO radio_info{.dwSize = sizeof(radio_info)};
-    if (BluetoothGetRadioInfo(radio_handle, &radio_info) != ERROR_SUCCESS)
+    if (pBluetoothGetRadioInfo(radio_handle, &radio_info) != ERROR_SUCCESS)
     {
       ERROR_LOG_FMT(WIIMOTE, "BluetoothGetRadioInfo");
       return EnumerationControl::Continue;
@@ -250,7 +432,7 @@ void EnumerateBluetoothDevices(u8 inquiry_length, auto&& enumeration_callback)
     search_params.hRadio = radio_handle;
 
     BLUETOOTH_DEVICE_INFO btdi{.dwSize = sizeof(btdi)};
-    const auto find_device = BluetoothFindFirstDevice(&search_params, &btdi);
+    const auto find_device = pBluetoothFindFirstDevice(&search_params, &btdi);
     if (find_device == nullptr)
     {
       const auto find_device_error = GetLastError();
@@ -261,14 +443,14 @@ void EnumerateBluetoothDevices(u8 inquiry_length, auto&& enumeration_callback)
       }
       return EnumerationControl::Continue;
     }
-    Common::ScopeGuard find_guard([=] { BluetoothFindDeviceClose(find_device); });
+    Common::ScopeGuard find_guard([=] { pBluetoothFindDeviceClose(find_device); });
 
     while (true)
     {
       if (enumeration_callback(radio_handle, radio_info, &btdi) == EnumerationControl::Stop)
         break;
 
-      if (!BluetoothFindNextDevice(find_device, &btdi))
+      if (!pBluetoothFindNextDevice(find_device, &btdi))
         break;
     }
     return EnumerationControl::Continue;
@@ -277,6 +459,9 @@ void EnumerateBluetoothDevices(u8 inquiry_length, auto&& enumeration_callback)
 
 u32 RemoveWiimoteBluetoothDevices(std::invocable<BLUETOOTH_DEVICE_INFO> auto&& should_remove_filter)
 {
+  if (!s_loaded_ok)
+    return 0;
+
   u32 remove_count = 0;
   EnumerateBluetoothWiimotes(0, [&](HANDLE radio_handle, const auto& radio_info, auto* btdi) {
     if (!std::invoke(should_remove_filter, *btdi))
@@ -284,7 +469,7 @@ u32 RemoveWiimoteBluetoothDevices(std::invocable<BLUETOOTH_DEVICE_INFO> auto&& s
 
     NOTICE_LOG_FMT(WIIMOTE, "Removing Wiimote device.");
 
-    const auto remove_device_result = BluetoothRemoveDevice(&btdi->Address);
+    const auto remove_device_result = pBluetoothRemoveDevice(&btdi->Address);
     if (remove_device_result != ERROR_SUCCESS)
     {
       ERROR_LOG_FMT(WIIMOTE, "BluetoothRemoveDevice failed: {}", remove_device_result);
@@ -313,6 +498,9 @@ static u32 RemoveUnusableWiimoteBluetoothDevices()
 static u32 DiscoverAndPairWiimotes(u8 inquiry_length,
                                    std::optional<AuthenticationMethod> auth_method = std::nullopt)
 {
+  if (!s_loaded_ok)
+    return 0;
+
   u32 success_count = 0;
   EnumerateBluetoothWiimotes(
       inquiry_length, [&](HANDLE radio_handle, const auto& radio_info, auto* btdi) {
@@ -329,7 +517,7 @@ static u32 DiscoverAndPairWiimotes(u8 inquiry_length,
         }
 
         INFO_LOG_FMT(WIIMOTE, "Enabling HID service on Wiimote");
-        const auto service_state_result = BluetoothSetServiceState(
+        const auto service_state_result = pBluetoothSetServiceState(
             radio_handle, btdi, &HumanInterfaceDeviceServiceClass_UUID, BLUETOOTH_SERVICE_ENABLE);
         if (service_state_result != ERROR_SUCCESS)
         {
@@ -371,6 +559,8 @@ void WiimoteScannerWindows::RemoveRememberedWiimotes()
 
 WiimoteScannerWindows::WiimoteScannerWindows()
 {
+  init_lib();
+
   m_device_change_notification.Register([this](Common::DeviceChangeNotification::EventType) {
     m_devices_changed.store(true, std::memory_order_release);
   });

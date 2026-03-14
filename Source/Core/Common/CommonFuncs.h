@@ -5,6 +5,10 @@
 
 #ifdef _WIN32
 #include <optional>
+#ifdef __LIBRETRO__
+#include <windows.h>
+#include <appmodel.h>
+#endif
 #endif
 #include <string>
 #ifdef __MINGW32__
@@ -67,5 +71,9 @@ std::string GetWin32ErrorString(unsigned long error_code);
 
 // Obtains a full path to the specified module.
 std::optional<std::wstring> GetModuleName(void* hInstance);
+#endif
+
+#ifdef __LIBRETRO__
+extern bool is_uwp();
 #endif
 }  // namespace Common

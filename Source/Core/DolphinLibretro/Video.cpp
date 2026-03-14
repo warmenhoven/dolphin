@@ -24,8 +24,12 @@
 #include "VideoBackends/D3D12/D3D12BoundingBox.h"
 #endif
 
+#ifdef HAS_OPENGL
 #include "Common/GL/GLContext.h"
 #include "Common/GL/GLUtil.h"
+#include "VideoBackends/OGL/OGLGfx.h"
+#endif
+
 #include "Common/Logging/Log.h"
 #include "Common/Version.h"
 #include "Core/Config/GraphicsSettings.h"
@@ -35,7 +39,7 @@
 #include "Core/Host.h"
 #include "DolphinLibretro/Common/Options.h"
 #include "DolphinLibretro/VideoContexts/ContextStatus.h"
-#include "VideoBackends/OGL/OGLGfx.h"
+
 #include "VideoCommon/AsyncRequests.h"
 #include "VideoCommon/Fifo.h"
 #include "VideoCommon/VertexLoaderManager.h"
@@ -88,6 +92,7 @@ void Init()
     retro_hw_context_type preferred = RETRO_HW_CONTEXT_NONE;
     if (environ_cb(RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER, &preferred) && SetHWRender(preferred))
       return;
+#ifdef HAS_OPENGL
     if (SetHWRender(RETRO_HW_CONTEXT_OPENGL_CORE))
       return;
     if (SetHWRender(RETRO_HW_CONTEXT_OPENGL))
@@ -98,6 +103,7 @@ void Init()
       return;
     if (SetHWRender(RETRO_HW_CONTEXT_OPENGLES3))
       return;
+#endif
 #ifdef _WIN32
     if (SetHWRender(RETRO_HW_CONTEXT_D3D12))
       return;
@@ -128,6 +134,7 @@ bool SetHWRender(retro_hw_context_type type, const int version_major, const int 
 
   switch (type)
   {
+#ifdef HAS_OPENGL
   case RETRO_HW_CONTEXT_OPENGL_CORE:
     // minimum requirements to run is opengl 3.3 (RA will try to use highest version available anyway)
     hw_render.version_major = (version_major != -1) ? version_major : 3;
@@ -172,6 +179,7 @@ bool SetHWRender(retro_hw_context_type type, const int version_major, const int 
     }
     break;
   }
+#endif
 #ifdef _WIN32
   case RETRO_HW_CONTEXT_D3D11:
     hw_render.version_major = 11;
@@ -278,7 +286,12 @@ void ContextReset(void)
     DX11::D3D::device = d3d->device;
     DX11::D3D::context = d3d->context;
     DX11::D3D::feature_level = d3d->featureLevel;
-    D3DCommon::d3d_compile = d3d->D3DCompile;
+
+    if (!d3d->D3DCompile)
+    {
+      ERROR_LOG_FMT(VIDEO, "D3DCompile function pointer is null!");
+      return;
+    }
 
     if (!d3d11_library.IsOpen() && !d3d11_library.Open("d3d11.dll"))
     {
@@ -293,6 +306,9 @@ void ContextReset(void)
       return;
     }
 
+    // was overriden in LoadLibraries
+    D3DCommon::d3d_compile = d3d->D3DCompile;
+
     if (FAILED(DX11::D3D::device.As(&DX11::D3D::device1)))
     {
       WARN_LOG_FMT(VIDEO, "Missing Direct3D 11.1 support. Logical operations will not be supported.");
@@ -302,6 +318,12 @@ void ContextReset(void)
     DX11::D3D::stateman = std::make_unique<DX11::D3D::StateManager>();
 
     DX11::VideoBackend* d3d11 = static_cast<DX11::VideoBackend*>(g_video_backend);
+
+    if (!d3d11)
+    {
+      WARN_LOG_FMT(VIDEO, "D3D11 backend is null");
+      return;
+    }
 
     d3d11->FillD3DBackendInfo();
     UpdateActiveConfig();
@@ -501,11 +523,13 @@ void ContextDestroy(void)
 
   g_context_status.MarkDestroyed();
 
+#ifdef HAS_OPENGL
   if (g_gfx &&
       Config::Get(Config::MAIN_GFX_BACKEND) == "OGL")
   {
     static_cast<OGL::OGLGfx*>(g_gfx.get())->SetSystemFrameBuffer(0);
   }
+#endif
 
   if (g_video_backend)
   {

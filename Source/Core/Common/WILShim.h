@@ -24,3 +24,5 @@
 #ifndef __is_abstract
 #define __is_abstract(type) __is_abstract(type)
 #endif
+
+#define __annotation(...) ((void)0)

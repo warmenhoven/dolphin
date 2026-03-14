@@ -97,4 +97,20 @@ std::optional<std::wstring> GetModuleName(void* hInstance)
   return name;
 }
 #endif
+
+#ifdef __LIBRETRO__
+bool is_uwp()
+{
+#if defined(_WIN32)
+  static bool cached = [] {
+    UINT32 length = 0;
+    return GetCurrentPackageFamilyName(&length, nullptr) != APPMODEL_ERROR_NO_PACKAGE;
+  }();
+  return cached;
+#else
+  return false;
+#endif
+}
+#endif
+
 }  // namespace Common

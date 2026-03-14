@@ -102,7 +102,6 @@ static void SetCurrentThreadNameViaException(const char* name)
   {
   }
 #else
-  RaiseException(MS_VC_EXCEPTION, 0, sizeof(info) / sizeof(ULONG_PTR), (ULONG_PTR*)&info);
 #endif
 }
 

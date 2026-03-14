@@ -75,13 +75,13 @@ if(MINGW)
   target_link_libraries(dolphin_libretro PRIVATE
     common
     setupapi
-    bthprops
-    bluetoothapis
-    hid
-    cfgmgr32
   )
 endif()
 
 if(MINGW OR LIBRETRO_STATIC OR WEBOS)
 	target_link_options(dolphin_libretro PRIVATE -static-libgcc -static-libstdc++)
+endif()
+
+if(MINGW AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+  target_link_options(dolphin_libretro PRIVATE -Wl,--allow-multiple-definition)
 endif()

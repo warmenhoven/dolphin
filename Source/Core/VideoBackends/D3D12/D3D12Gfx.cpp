@@ -3,6 +3,7 @@
 
 #include "VideoBackends/D3D12/D3D12Gfx.h"
 
+#include "Common/CommonFuncs.h"
 #include "Common/Logging/Log.h"
 
 #include "VideoBackends/D3D12/Common.h"
@@ -161,7 +162,9 @@ void Gfx::SetPipeline(const AbstractPipeline* pipeline)
       m_dirty_bits |= DirtyState_RootSignature | DirtyState_PS_CBV | DirtyState_VS_CBV |
                       DirtyState_GS_CBV | DirtyState_SRV_Descriptor |
                       DirtyState_Sampler_Descriptor | DirtyState_UAV_Descriptor |
-                      DirtyState_VS_SRV_Descriptor | DirtyState_CUS_CBV;
+                      DirtyState_VS_SRV_Descriptor;
+      if (!Common::is_uwp())
+        m_dirty_bits |= DirtyState_CUS_CBV;
     }
     if (dx_pipeline->UseIntegerRTV() != m_state.using_integer_rtv)
     {
@@ -525,7 +528,9 @@ bool Gfx::ApplyState()
         DirtyState_ScissorRect | DirtyState_PS_UAV | DirtyState_PS_CBV | DirtyState_VS_CBV |
         DirtyState_GS_CBV | DirtyState_SRV_Descriptor | DirtyState_Sampler_Descriptor |
         DirtyState_UAV_Descriptor | DirtyState_VertexBuffer | DirtyState_IndexBuffer |
-        DirtyState_PrimitiveTopology | DirtyState_VS_SRV_Descriptor | DirtyState_CUS_CBV);
+        DirtyState_PrimitiveTopology | DirtyState_VS_SRV_Descriptor);
+  if (!Common::is_uwp())
+    m_dirty_bits &= ~DirtyState_CUS_CBV;
 
   auto* const cmdlist = g_dx_context->GetCommandList();
   auto* const pipeline = static_cast<const DXPipeline*>(m_current_pipeline);

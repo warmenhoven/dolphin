@@ -89,7 +89,7 @@ std::unique_ptr<GLContext> GLContext::Create(const WindowSystemInfo& wsi, bool s
   if (wsi.type == WindowSystemType::MacOS || wsi.type == WindowSystemType::Headless)
     context = std::make_unique<GLContextAGL>();
 #endif
-#if defined(_WIN32)
+#if defined(_WIN32) && !defined(__LIBRETRO__)
   if (wsi.type == WindowSystemType::Windows)
     context = std::make_unique<GLContextWGL>();
 #endif

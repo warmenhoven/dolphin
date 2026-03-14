@@ -88,26 +88,29 @@ PRIVATE
 )
 
 if(WIN32)
-  target_sources(inputcommon PRIVATE
-    ControllerInterface/DInput/DInput.cpp
-    ControllerInterface/DInput/DInput.h
-    ControllerInterface/DInput/DInput8.h
-    ControllerInterface/DInput/DInputJoystick.cpp
-    ControllerInterface/DInput/DInputJoystick.h
-    ControllerInterface/DInput/DInputKeyboardMouse.cpp
-    ControllerInterface/DInput/DInputKeyboardMouse.h
-    ControllerInterface/DInput/NamedKeys.h
-    ControllerInterface/DInput/XInputFilter.cpp
-    ControllerInterface/DInput/XInputFilter.h
-    ControllerInterface/Win32/Win32.cpp
-    ControllerInterface/Win32/Win32.h
-    ControllerInterface/WGInput/WGInput.cpp
-    ControllerInterface/WGInput/WGInput.h
-    ControllerInterface/XInput/XInput.cpp
-    ControllerInterface/XInput/XInput.h
-    ControllerInterface/ForceFeedback/ForceFeedbackDevice.cpp
-    ControllerInterface/ForceFeedback/ForceFeedbackDevice.h
-  )
+  if(NOT LIBRETRO)
+    target_sources(inputcommon PRIVATE
+      ControllerInterface/DInput/DInput.cpp
+      ControllerInterface/DInput/DInput.h
+      ControllerInterface/DInput/DInput8.h
+      ControllerInterface/DInput/DInputJoystick.cpp
+      ControllerInterface/DInput/DInputJoystick.h
+      ControllerInterface/DInput/DInputKeyboardMouse.cpp
+      ControllerInterface/DInput/DInputKeyboardMouse.h
+      ControllerInterface/DInput/NamedKeys.h
+      ControllerInterface/DInput/XInputFilter.cpp
+      ControllerInterface/DInput/XInputFilter.h
+      ControllerInterface/Win32/Win32.cpp
+      ControllerInterface/Win32/Win32.h
+      ControllerInterface/WGInput/WGInput.cpp
+      ControllerInterface/WGInput/WGInput.h
+      ControllerInterface/XInput/XInput.cpp
+      ControllerInterface/XInput/XInput.h
+      ControllerInterface/ForceFeedback/ForceFeedbackDevice.cpp
+      ControllerInterface/ForceFeedback/ForceFeedbackDevice.h
+    )
+    target_link_libraries(inputcommon PRIVATE dinput8)
+  endif()
   if(MINGW)
     set_source_files_properties(
       ControllerInterface/WGInput/WGInput.cpp
@@ -115,7 +118,6 @@ if(WIN32)
     )
     target_link_libraries(inputcommon
       PRIVATE
-      dinput8
       cfgmgr32
     )
   endif()

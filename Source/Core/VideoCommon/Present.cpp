@@ -221,7 +221,17 @@ void Presenter::ViSwap(u32 xfb_addr, u32 fb_width, u32 fb_stride, u32 fb_height,
   g_is_duplicate_frame = is_duplicate;
 
   // allow presentation logic to proceed to always generate a frame with OGL
-  if(is_duplicate && Config::Get(Config::MAIN_GFX_BACKEND) == "OGL")
+  static bool ignore_duplicate_flag = [] {
+    bool flag = Config::Get(Config::MAIN_GFX_BACKEND) == "OGL";
+#ifdef _WIN32
+    // always generate a frame with D3D on XBOX otherwise a blank screen
+    if (Common::is_uwp() && Config::Get(Config::MAIN_GFX_BACKEND) == "D3D")
+      flag = true;
+#endif
+    return flag;
+  }();
+
+  if (is_duplicate && ignore_duplicate_flag)
     is_duplicate = false;
 #endif
 
