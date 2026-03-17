@@ -510,10 +510,10 @@ if(LIBRETRO)
     set(USE_SYSTEM_LIBLZMA OFF CACHE BOOL "" FORCE)
     set(USE_SYSTEM_LZO OFF CACHE BOOL "" FORCE)
     set(USE_SYSTEM_ZSTD OFF CACHE BOOL "" FORCE)
+    # prevent minizip from finding system libs via pkg-config
+    set(MZ_FORCE_FETCH_LIBS ON CACHE BOOL "" FORCE)
   endif()
   if(IOS)
-    # prevent use of system zsdt/openssl in minizip
-    set(MZ_FORCE_FETCH_LIBS ON CACHE BOOL "" FORCE)
     set(MZ_OPENSSL OFF CACHE BOOL "" FORCE)
   endif()
   if(WIN32)
