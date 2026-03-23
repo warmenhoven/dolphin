@@ -499,7 +499,19 @@ bool retro_load_game(const struct retro_game_info* game)
 
 #ifdef IPHONEOS
   bool can_jit = false;
-  if (!Libretro::environ_cb(RETRO_ENVIRONMENT_GET_JIT_CAPABLE, &can_jit) || !can_jit)
+  {
+    struct retro_exec_mem_alloc probe = {};
+    probe.version = 1;
+    probe.size = 0;
+    if (Libretro::environ_cb(RETRO_ENVIRONMENT_EXEC_MEM_ALLOC, &probe))
+    {
+      if (probe.mode != RETRO_EXEC_MEM_MODE_UNAVAILABLE)
+        can_jit = true;
+    }
+    else if (!Libretro::environ_cb(RETRO_ENVIRONMENT_GET_JIT_CAPABLE, &can_jit))
+      can_jit = false;
+  }
+  if (!can_jit)
   {
     auto current = Config::Get(Config::MAIN_CPU_CORE);
     if (current == PowerPC::CPUCore::JIT64 ||
