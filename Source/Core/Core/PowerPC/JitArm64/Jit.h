@@ -33,6 +33,8 @@ public:
   void Init() override;
   void Shutdown() override;
 
+  ptrdiff_t GetWritableRegionDiff() const override { return Arm64Gen::ARM64CodeBlock::writable_region_diff; }
+
   JitCommon::ConstantPropagation& GetConstantPropagation() { return m_constant_propagation; }
 
   JitBaseBlockCache* GetBlockCache() override { return &blocks; }

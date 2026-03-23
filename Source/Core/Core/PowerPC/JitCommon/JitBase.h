@@ -202,6 +202,7 @@ public:
 
   bool IsProfilingEnabled() const { return m_enable_profiling && m_enable_debugging; }
   bool IsDebuggingEnabled() const { return m_enable_debugging; }
+  virtual ptrdiff_t GetWritableRegionDiff() const { return 0; }
   bool IsBranchWatchEnabled() const
   {
     auto& branch_watch = m_system.GetPowerPC().GetBranchWatch();

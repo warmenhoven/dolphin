@@ -172,7 +172,7 @@ void JitArm64::ClearCache()
 
   blocks.Clear();
   blocks.ClearRangesToFree();
-  const Common::ScopedJITPageWriteAndNoExecute enable_jit_page_writes(GetRegionPtr());
+  const Common::ScopedJITPageWriteAndNoExecute enable_jit_page_writes(GetRegionPtr(), GetWritableRegionDiff());
   m_far_code_0.ClearCodeSpace();
   m_near_code_0.ClearCodeSpace();
   m_near_code_1.ClearCodeSpace();
@@ -986,7 +986,7 @@ void JitArm64::Jit(u32 em_address, bool clear_cache_and_retry_on_failure)
     ClearCache();
   FreeRanges();
 
-  const Common::ScopedJITPageWriteAndNoExecute enable_jit_page_writes(GetRegionPtr());
+  const Common::ScopedJITPageWriteAndNoExecute enable_jit_page_writes(GetRegionPtr(), GetWritableRegionDiff());
 
   std::size_t block_size = m_code_buffer.size();
 

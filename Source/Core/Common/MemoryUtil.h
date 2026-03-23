@@ -8,9 +8,19 @@
 
 #include "Common/CommonTypes.h"
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 namespace Common
 {
 void* AllocateExecutableMemory(size_t size);
+
+#if defined(IPHONEOS) || (defined(__APPLE__) && defined(__aarch64__) && !TARGET_OS_IPHONE)
+ptrdiff_t AllocateWritableRegionAndGetDiff(void* rx_ptr, size_t size);
+void FreeWritableRegion(void* rx_ptr, size_t size, ptrdiff_t diff);
+void FreeExecutableMemory(void* ptr, size_t size);
+#endif
 
 // These two functions control the executable/writable state of the W^X memory
 // allocations. More detailed documentation about them is in the .cpp file.
@@ -26,8 +36,17 @@ void JITPageWriteDisableExecuteEnable();
 // write to executable memory but not execute it.
 struct ScopedJITPageWriteAndNoExecute
 {
-  ScopedJITPageWriteAndNoExecute(u8*) { JITPageWriteEnableExecuteDisable(); }
-  ~ScopedJITPageWriteAndNoExecute() { JITPageWriteDisableExecuteEnable(); }
+  ScopedJITPageWriteAndNoExecute(u8*, ptrdiff_t writable_region_diff = 0)
+  {
+    if (writable_region_diff != 0) return;
+    JITPageWriteEnableExecuteDisable();
+    m_active = true;
+  }
+  ~ScopedJITPageWriteAndNoExecute()
+  {
+    if (m_active) JITPageWriteDisableExecuteEnable();
+  }
+  bool m_active = false;
 };
 #else
 void JITPageWriteEnableExecuteDisable(void* ptr);
@@ -35,14 +54,20 @@ void JITPageWriteDisableExecuteEnable(void* ptr);
 
 struct ScopedJITPageWriteAndNoExecute
 {
-  ScopedJITPageWriteAndNoExecute(u8* region)
+  ScopedJITPageWriteAndNoExecute(u8* region, ptrdiff_t writable_region_diff = 0)
   {
+    if (writable_region_diff != 0)
+      return;  // Dual-mapped: no protection toggling needed
     ptr = reinterpret_cast<void*>(region);
     JITPageWriteEnableExecuteDisable(ptr);
   }
-  ~ScopedJITPageWriteAndNoExecute() { JITPageWriteDisableExecuteEnable(ptr); }
+  ~ScopedJITPageWriteAndNoExecute()
+  {
+    if (ptr)
+      JITPageWriteDisableExecuteEnable(ptr);
+  }
 
-  void* ptr;
+  void* ptr = nullptr;
 };
 #endif
 void* AllocateMemoryPages(size_t size);

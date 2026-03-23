@@ -19,6 +19,13 @@
 #if defined(_M_ARM_64) && defined(__APPLE__)
 #include <pthread.h>
 #endif
+#if defined(__APPLE__) && defined(__aarch64__)
+#include <mach/mach.h>
+#endif
+#if defined(IPHONEOS)
+#include <signal.h>
+#include <sys/ucontext.h>
+#endif
 #if defined __APPLE__ || defined __FreeBSD__ || defined __OpenBSD__ || defined __NetBSD__
 #include <sys/sysctl.h>
 #elif defined __HAIKU__
@@ -39,23 +46,30 @@ namespace Common
 
 #ifdef IPHONEOS
 static JITMemoryTracker g_jit_memory_tracker;
+static bool ios_use_dual_mapping();
+static void* AllocateExecutableMemory_iOS26(size_t size);
 #endif
 
 void* AllocateExecutableMemory(size_t size)
 {
+#ifdef IPHONEOS
+  if (ios_use_dual_mapping())
+    return AllocateExecutableMemory_iOS26(size);
+#endif
 #if defined(_WIN32)
   void* ptr = VirtualAlloc(nullptr, size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+#elif defined(__APPLE__) && defined(__aarch64__) && !defined(IPHONEOS)
+  // macOS ARM: mmap R-X for dual mapping (no MAP_JIT, which prevents vm_remap)
+  void* ptr = mmap(nullptr, size, PROT_READ | PROT_EXEC, MAP_ANON | MAP_PRIVATE, -1, 0);
+  if (ptr == MAP_FAILED)
+    ptr = nullptr;
 #else
   int map_flags = MAP_ANON | MAP_PRIVATE;
 #if defined(__APPLE__) && !defined(IPHONEOS)
   map_flags |= MAP_JIT;
 #endif
 
-  int map_prot = PROT_READ | PROT_EXEC;
-#ifndef IPHONEOS
-  // The default protection is r-x on non-iOS platforms.
-  map_prot |= PROT_WRITE;
-#endif
+  int map_prot = PROT_READ | PROT_WRITE | PROT_EXEC;
 
   void* ptr = mmap(nullptr, size, map_prot, map_flags, -1, 0);
   if (ptr == MAP_FAILED)
@@ -316,5 +330,102 @@ size_t MemPhysical()
   return (size_t)memInfo.totalram * memInfo.mem_unit;
 #endif
 }
+
+#if defined(__APPLE__) && defined(__aarch64__)
+ptrdiff_t AllocateWritableRegionAndGetDiff(void* rx_ptr, size_t size)
+{
+#ifdef IPHONEOS
+  if (!ios_use_dual_mapping())
+    return 0;
+#endif
+  vm_address_t rw_region = 0;
+  vm_prot_t cur_protection = 0;
+  vm_prot_t max_protection = 0;
+
+  kern_return_t retval =
+      vm_remap(mach_task_self(), &rw_region, size, 0, true, mach_task_self(),
+               (vm_address_t)rx_ptr, false, &cur_protection, &max_protection,
+               VM_INHERIT_DEFAULT);
+  if (retval != KERN_SUCCESS)
+  {
+    PanicAlertFmt("AllocateWritableRegionAndGetDiff failed! vm_remap returned {0:#x}", retval);
+    return 0;
+  }
+
+  u8* rw_ptr = reinterpret_cast<u8*>(rw_region);
+  if (mprotect(rw_ptr, size, PROT_READ | PROT_WRITE) != 0)
+  {
+    PanicAlertFmt("AllocateWritableRegionAndGetDiff failed! mprotect returned {}",
+                  LastStrerrorString());
+    return 0;
+  }
+
+  return rw_ptr - static_cast<u8*>(rx_ptr);
+}
+
+void FreeWritableRegion(void* rx_ptr, size_t size, ptrdiff_t diff)
+{
+  u8* rw_ptr = static_cast<u8*>(rx_ptr) + diff;
+  vm_deallocate(mach_task_self(), reinterpret_cast<vm_address_t>(rw_ptr), size);
+}
+
+void FreeExecutableMemory(void* ptr, size_t size)
+{
+  if (ptr)
+    munmap(ptr, size);
+}
+#endif
+
+#ifdef IPHONEOS
+// iOS 26+: allocate R-X pages and notify the debugger.
+static void* AllocateExecutableMemory_iOS26(size_t size)
+{
+  void* ptr = mmap(nullptr, size, PROT_READ | PROT_EXEC, MAP_ANON | MAP_PRIVATE, -1, 0);
+  if (ptr == MAP_FAILED)
+  {
+    PanicAlertFmt("Failed to allocate executable memory (iOS 26)");
+    return nullptr;
+  }
+
+  // Notify the debugger about the executable region.
+  static volatile bool s_brk_trapped = false;
+  static struct sigaction s_prev_trap;
+
+  struct sigaction trap_act = {};
+  trap_act.sa_sigaction = [](int, siginfo_t*, void* ctx) {
+    s_brk_trapped = true;
+    ((ucontext_t*)ctx)->uc_mcontext->__ss.__pc += 4;
+  };
+  sigemptyset(&trap_act.sa_mask);
+  trap_act.sa_flags = SA_SIGINFO;
+  sigaction(SIGTRAP, &trap_act, &s_prev_trap);
+
+  s_brk_trapped = false;
+  __asm__ volatile(
+    "mov x0, %0\n"
+    "mov x1, %1\n"
+    "brk #0x69"
+    :: "r"(ptr), "r"(size)
+    : "x0", "x1", "memory"
+  );
+
+  sigaction(SIGTRAP, &s_prev_trap, nullptr);
+
+  return ptr;
+}
+
+extern "C" int csops(int, unsigned int, void*, size_t);
+
+static bool ios_use_dual_mapping()
+{
+  if (__builtin_available(iOS 26, *))
+  {
+    int flags = 0;
+    if (!csops(0, 0 /*CS_OPS_STATUS*/, &flags, sizeof(flags)) && (flags & 0x10000000 /*CS_DEBUGGED*/))
+      return true;
+  }
+  return false;
+}
+#endif
 
 }  // namespace Common

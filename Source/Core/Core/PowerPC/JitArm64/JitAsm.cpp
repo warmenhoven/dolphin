@@ -30,7 +30,7 @@ using namespace Arm64Gen;
 
 void JitArm64::GenerateAsm()
 {
-  const Common::ScopedJITPageWriteAndNoExecute enable_jit_page_writes(GetRegionPtr());
+  const Common::ScopedJITPageWriteAndNoExecute enable_jit_page_writes(GetRegionPtr(), GetWritableRegionDiff());
 
   const bool enable_debugging = Config::IsDebuggingEnabled();
 
@@ -795,26 +795,34 @@ void JitArm64::GenerateQuantizedLoads()
   paired_load_quantized = reinterpret_cast<const u8**>(AlignCode16());
   ReserveCodeSpace(8 * sizeof(u8*));
 
-  paired_load_quantized[0] = loadPairedFloatTwo;
-  paired_load_quantized[1] = loadPairedIllegal;
-  paired_load_quantized[2] = loadPairedIllegal;
-  paired_load_quantized[3] = loadPairedIllegal;
-  paired_load_quantized[4] = loadPairedU8Two;
-  paired_load_quantized[5] = loadPairedU16Two;
-  paired_load_quantized[6] = loadPairedS8Two;
-  paired_load_quantized[7] = loadPairedS16Two;
+  {
+    const u8** plt_rw = reinterpret_cast<const u8**>(
+        reinterpret_cast<u8*>(paired_load_quantized) + GetWritableRegionDiff());
+    plt_rw[0] = loadPairedFloatTwo;
+    plt_rw[1] = loadPairedIllegal;
+    plt_rw[2] = loadPairedIllegal;
+    plt_rw[3] = loadPairedIllegal;
+    plt_rw[4] = loadPairedU8Two;
+    plt_rw[5] = loadPairedU16Two;
+    plt_rw[6] = loadPairedS8Two;
+    plt_rw[7] = loadPairedS16Two;
+  }
 
   single_load_quantized = reinterpret_cast<const u8**>(AlignCode16());
   ReserveCodeSpace(8 * sizeof(u8*));
 
-  single_load_quantized[0] = loadPairedFloatOne;
-  single_load_quantized[1] = loadPairedIllegal;
-  single_load_quantized[2] = loadPairedIllegal;
-  single_load_quantized[3] = loadPairedIllegal;
-  single_load_quantized[4] = loadPairedU8One;
-  single_load_quantized[5] = loadPairedU16One;
-  single_load_quantized[6] = loadPairedS8One;
-  single_load_quantized[7] = loadPairedS16One;
+  {
+    const u8** slt_rw = reinterpret_cast<const u8**>(
+        reinterpret_cast<u8*>(single_load_quantized) + GetWritableRegionDiff());
+    slt_rw[0] = loadPairedFloatOne;
+    slt_rw[1] = loadPairedIllegal;
+    slt_rw[2] = loadPairedIllegal;
+    slt_rw[3] = loadPairedIllegal;
+    slt_rw[4] = loadPairedU8One;
+    slt_rw[5] = loadPairedU16One;
+    slt_rw[6] = loadPairedS8One;
+    slt_rw[7] = loadPairedS16One;
+  }
 }
 
 void JitArm64::GenerateQuantizedStores()
@@ -1015,24 +1023,32 @@ void JitArm64::GenerateQuantizedStores()
   paired_store_quantized = reinterpret_cast<const u8**>(AlignCode16());
   ReserveCodeSpace(8 * sizeof(u8*));
 
-  paired_store_quantized[0] = storePairedFloat;
-  paired_store_quantized[1] = storePairedIllegal;
-  paired_store_quantized[2] = storePairedIllegal;
-  paired_store_quantized[3] = storePairedIllegal;
-  paired_store_quantized[4] = storePairedU8;
-  paired_store_quantized[5] = storePairedU16;
-  paired_store_quantized[6] = storePairedS8;
-  paired_store_quantized[7] = storePairedS16;
+  {
+    const u8** pst_rw = reinterpret_cast<const u8**>(
+        reinterpret_cast<u8*>(paired_store_quantized) + GetWritableRegionDiff());
+    pst_rw[0] = storePairedFloat;
+    pst_rw[1] = storePairedIllegal;
+    pst_rw[2] = storePairedIllegal;
+    pst_rw[3] = storePairedIllegal;
+    pst_rw[4] = storePairedU8;
+    pst_rw[5] = storePairedU16;
+    pst_rw[6] = storePairedS8;
+    pst_rw[7] = storePairedS16;
+  }
 
   single_store_quantized = reinterpret_cast<const u8**>(AlignCode16());
   ReserveCodeSpace(8 * sizeof(u8*));
 
-  single_store_quantized[0] = storeSingleFloat;
-  single_store_quantized[1] = storePairedIllegal;
-  single_store_quantized[2] = storePairedIllegal;
-  single_store_quantized[3] = storePairedIllegal;
-  single_store_quantized[4] = storeSingleU8;
-  single_store_quantized[5] = storeSingleU16;
-  single_store_quantized[6] = storeSingleS8;
-  single_store_quantized[7] = storeSingleS16;
+  {
+    const u8** sst_rw = reinterpret_cast<const u8**>(
+        reinterpret_cast<u8*>(single_store_quantized) + GetWritableRegionDiff());
+    sst_rw[0] = storeSingleFloat;
+    sst_rw[1] = storePairedIllegal;
+    sst_rw[2] = storePairedIllegal;
+    sst_rw[3] = storePairedIllegal;
+    sst_rw[4] = storeSingleU8;
+    sst_rw[5] = storeSingleU16;
+    sst_rw[6] = storeSingleS8;
+    sst_rw[7] = storeSingleS16;
+  }
 }

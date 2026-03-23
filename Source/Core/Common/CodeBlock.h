@@ -32,6 +32,8 @@ protected:
   size_t region_size = 0;
   // Original size of the region we allocated.
   size_t total_region_size = 0;
+  // Offset from executable region to writable region (0 when not dual-mapped).
+  ptrdiff_t writable_region_diff = 0;
 
   bool m_is_child = false;
   std::vector<CodeBlock*> m_children;
@@ -58,6 +60,14 @@ public:
     else
       region = static_cast<u8*>(Common::AllocateMemoryPages(total_region_size));
     T::SetCodePtr(region, region + size);
+
+#if defined(IPHONEOS) || (defined(__APPLE__) && defined(__aarch64__) && !TARGET_OS_IPHONE)
+    if constexpr (executable)
+    {
+      writable_region_diff = Common::AllocateWritableRegionAndGetDiff(region, size);
+      T::SetWritableRegionDiff(writable_region_diff);
+    }
+#endif
   }
 
   // Always clear code space with breakpoints, so that if someone accidentally executes
@@ -72,15 +82,27 @@ public:
   void FreeCodeSpace()
   {
     ASSERT(!m_is_child);
-    Common::FreeMemoryPages(region, total_region_size);
+#if defined(IPHONEOS) || (defined(__APPLE__) && defined(__aarch64__) && !TARGET_OS_IPHONE)
+    if (writable_region_diff != 0)
+    {
+      Common::FreeWritableRegion(region, total_region_size, writable_region_diff);
+      Common::FreeExecutableMemory(region, total_region_size);
+    }
+    else
+#endif
+    {
+      Common::FreeMemoryPages(region, total_region_size);
+    }
     region = nullptr;
     region_size = 0;
     total_region_size = 0;
+    writable_region_diff = 0;
     for (CodeBlock* child : m_children)
     {
       child->region = nullptr;
       child->region_size = 0;
       child->total_region_size = 0;
+      child->writable_region_diff = 0;
     }
   }
 
@@ -90,6 +112,7 @@ public:
     return ptr >= region && ptr < (region + total_region_size);
   }
   u8* GetRegionPtr() { return region; }
+  ptrdiff_t GetWritableRegionDiff() const { return writable_region_diff; }
   void WriteProtect(bool allow_execute)
   {
     Common::WriteProtectMemory(region, region_size, allow_execute);
@@ -127,6 +150,7 @@ public:
     child->region = child_region;
     child->region_size = child_size;
     child->total_region_size = child_size;
+    child->writable_region_diff = writable_region_diff;
     child->ResetCodePtr();
     m_children.emplace_back(child);
   }
