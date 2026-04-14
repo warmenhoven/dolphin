@@ -489,17 +489,24 @@ bool retro_serialize(void* data, size_t size)
   if (system.IsDualCoreMode())
     ar->SetPassthrough(true);
 
-  Core::RunOnCPUThread(Core::System::GetInstance(), [&] {
+  const bool was_cpu = Core::IsCPUThread();
+  if (!was_cpu)
+    Core::DeclareAsCPUThread();
 
+  Core::RunOnCPUThread(Core::System::GetInstance(), [&] {
     PointerWrap p((u8**)&data, size, PointerWrap::Mode::Write);
     State::DoState(Core::System::GetInstance(), p);
   }, true);
+
+  if (!was_cpu)
+    Core::UndeclareAsCPUThread();
 
   if (system.IsDualCoreMode())
     ar->SetPassthrough(false);
 
   return true;
 }
+
 bool retro_unserialize(const void* data, size_t size)
 {
   Core::System& system = Core::System::GetInstance();
@@ -508,10 +515,17 @@ bool retro_unserialize(const void* data, size_t size)
   if (system.IsDualCoreMode())
     ar->SetPassthrough(true);
 
+  const bool was_cpu = Core::IsCPUThread();
+  if (!was_cpu)
+    Core::DeclareAsCPUThread();
+
   Core::RunOnCPUThread(Core::System::GetInstance(), [&] {
     PointerWrap p((u8**)&data, size, PointerWrap::Mode::Read);
     State::DoState(Core::System::GetInstance(), p);
   }, true);
+
+  if (!was_cpu)
+    Core::UndeclareAsCPUThread();
 
   if (system.IsDualCoreMode())
     ar->SetPassthrough(false);
