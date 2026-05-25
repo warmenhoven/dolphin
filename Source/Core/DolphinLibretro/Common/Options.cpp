@@ -260,6 +260,21 @@ static struct retro_core_option_v2_definition option_defs[] = {
     "enabled"
   },
   {
+    Libretro::Options::core::DISC_BASED_GAMES_BOOT_TO_WII_MENU,
+    "Core > Disc Based Games Boot to Wii Menu",
+    "Disc Based Games Boot to Wii System Menu",
+    "When a Wii System Menu is installed in the save location and the game is a disc based game, it will start the Wii Menu with the disc inserted in the drive instead of directly booting the game. "
+    "Beware: The game region must match the Wii Menu region otherwise the game will not be recognized.",
+    nullptr,
+    CATEGORY_CORE,
+    {
+      {"disabled", nullptr},
+      {"enabled", nullptr},
+      {nullptr, nullptr}
+    },
+    "disabled"
+  },
+  {
     Libretro::Options::core::LANGUAGE,
     "Core > System Language",
     "System Language",

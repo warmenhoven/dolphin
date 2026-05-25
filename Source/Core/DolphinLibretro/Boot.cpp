@@ -6,6 +6,7 @@
 #include <fstream>
 
 #include "Common/CommonPaths.h"
+#include "Core/CommonTitles.h"
 #include "Common/FileUtil.h"
 #include "Common/Version.h"
 #include "Core/Boot/Boot.h"
@@ -571,8 +572,34 @@ bool retro_load_game(const struct retro_game_info* game)
       Libretro::GetOption<bool>(sysconf::WII_LOGI_MICROPHONE_ENABLE, /*def=*/false));
   }
 
-  if (!BootManager::BootCore(Core::System::GetInstance(),
-                             BootParameters::GenerateFromFile(normalized_game_paths), wsi))
+  const bool disc_based_games_boot_to_wii_menu = Libretro::GetOption<bool>(Libretro::Options::core::DISC_BASED_GAMES_BOOT_TO_WII_MENU, false);
+  std::unique_ptr<BootParameters> boot_params = BootParameters::GenerateFromFile(normalized_game_paths);
+
+  if (disc_based_games_boot_to_wii_menu)
+  {
+    bool is_disc_title = false;
+    if (!normalized_game_paths.empty())
+    {
+      auto volume = DiscIO::CreateDisc(normalized_game_paths.front());
+      if (volume && (volume->GetVolumeType() == DiscIO::Platform::WiiDisc || volume->GetVolumeType() == DiscIO::Platform::GameCubeDisc))
+        is_disc_title = true;
+      else
+        WARN_LOG_FMT(BOOT, "'Disc Based Games Boot to Wii System Menu' enabled but content is not a disc based game, ignoring Wii Menu");
+    }
+
+    const std::string wii_menu_tmd_file_name = Common::GetTMDFileName(Titles::SYSTEM_MENU, Common::FromWhichRoot::Configured);
+    const bool wii_menu_installed = File::Exists(wii_menu_tmd_file_name);
+    if (is_disc_title && !wii_menu_installed)
+      WARN_LOG_FMT(BOOT,"'Disc Based Games Boot to Wii System Menu' enabled but Wii Menu not found at save location: {}, booting directly instead", wii_menu_tmd_file_name);
+
+    if (is_disc_title && wii_menu_installed)
+    {
+      Config::SetBase(Config::MAIN_DEFAULT_ISO, normalized_game_paths.front());
+      boot_params = std::make_unique<BootParameters>(BootParameters::NANDTitle{Titles::SYSTEM_MENU});
+    }
+  }
+
+  if (!BootManager::BootCore(Core::System::GetInstance(), std::move(boot_params), wsi))
   {
     ERROR_LOG_FMT(BOOT, "Could not boot {}", game->path);
     return false;
