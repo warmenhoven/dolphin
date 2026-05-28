@@ -516,7 +516,7 @@ if(LIBRETRO)
     # Xbox remove dependency on Zlib
     set(USE_SYSTEM_ZLIB OFF CACHE BOOL "" FORCE)
   endif()
-  if(CMAKE_CXX_COMPILER MATCHES "arm-webos-linux-gnueabi-")
+  if(CMAKE_CXX_COMPILER MATCHES ".*(arm-webos-linux-gnueabi-|aarch64-webos-linux-gnu).*")
     set(WEBOS TRUE CACHE BOOL "Building for webOS")
     add_definitions(-D__WEBOS__)
     set(ENABLE_VULKAN OFF CACHE BOOL "" FORCE)
