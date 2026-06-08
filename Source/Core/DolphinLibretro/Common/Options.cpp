@@ -728,7 +728,7 @@ static struct retro_core_option_v2_definition option_defs[] = {
     Libretro::Options::gfx_settings::CROP_OVERSCAN,
     "Graphics > Settings > Crop Overscan",
     "Crop Overscan",
-    "Crop overscan to match standard NTSC output resolutions. Recommended for NTSC CRTs.",
+    "Report standard TV output resolution to the frontend (NTSC: 480, PAL: 576). Recommended for CRT displays with SwitchRes.",
     nullptr,
     CATEGORY_GFX_SETTINGS,
     {

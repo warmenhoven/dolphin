@@ -69,13 +69,18 @@ static Common::DynamicLibrary d3d11_library;
 static Common::DynamicLibrary d3d12_library;
 #endif
 
-static int GetAdjustedBaseHeight()
+int GetAdjustedBaseHeight()
 {
   const bool crop_overscan = Libretro::Options::GetCached<bool>(
     Libretro::Options::gfx_settings::CROP_OVERSCAN);
 
-  if (crop_overscan && retro_get_region() == RETRO_REGION_NTSC)
-    return 480;
+  if (crop_overscan)
+  {
+    if (retro_get_region() == RETRO_REGION_NTSC)
+      return 480;
+    else
+      return 576;
+  }
 
   return EFB_HEIGHT;
 }
