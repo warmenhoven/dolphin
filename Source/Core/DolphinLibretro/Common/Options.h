@@ -254,6 +254,13 @@ namespace gfx_hacks {
 }  // namespace gfx_hacks
 
 // ======================================================
+// Graphics > Game Specific
+// ======================================================
+namespace gfx_gamespecific {
+  constexpr const char GFX_PERF_QUERIES_ENABLE[] = "dolphin_per_queries_enable";
+}  // namespace gfx_gamespecific
+
+// ======================================================
 // Wiimote IR / Gyro / Swing
 // ======================================================
 namespace wiimote {

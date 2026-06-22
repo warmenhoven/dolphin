@@ -20,6 +20,7 @@ static constexpr const char* CATEGORY_GFX_HARDWARE = "graphics_hardware";
 static constexpr const char* CATEGORY_GFX_SETTINGS = "graphics_settings";
 static constexpr const char* CATEGORY_GFX_ENHANCEMENTS = "graphics_enhancements";
 static constexpr const char* CATEGORY_GFX_HACKS = "graphics_hacks";
+static constexpr const char* CATEGORY_GFX_GAMESPECIFIC = "graphics_gamespecific";
 static constexpr const char* CATEGORY_WIIMOTE = "wiimote";
 
 // V2 Categories
@@ -68,6 +69,11 @@ static const struct retro_core_option_v2_category option_cats[] = {
     CATEGORY_GFX_HACKS,
     "Graphics > Hacks",
     "Configure accuracy vs performance tradeoffs."
+  },
+  {
+    CATEGORY_GFX_GAMESPECIFIC,
+    "Graphics > Game Specific",
+    "Configure game specific settings."
   },
   {
     CATEGORY_WIIMOTE,
@@ -1273,6 +1279,22 @@ static struct retro_core_option_v2_definition option_defs[] = {
     "disabled"
   },
   #endif
+
+  // ========== Graphics.GameSpecific ==========
+  {
+    Libretro::Options::gfx_gamespecific::GFX_PERF_QUERIES_ENABLE,
+    "Graphics > Game Specific > Performance Queries",
+    "Performance Queries",
+    "Enable performance queiries.",
+    nullptr,
+    CATEGORY_GFX_GAMESPECIFIC,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr, nullptr }
+    },
+    "disabled"
+  },
 
   {
     Libretro::Options::wiimote::HOTKEY_SIDEWAYS_TOGGLE,

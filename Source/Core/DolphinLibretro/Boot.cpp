@@ -489,6 +489,10 @@ bool retro_load_game(const struct retro_game_info* game)
       break;
   }
 
+  // Graphics.GameSpecific
+  Config::SetBase(Config::GFX_PERF_QUERIES_ENABLE,
+                 Libretro::GetOption<bool>(gfx_gamespecific::GFX_PERF_QUERIES_ENABLE, /*def=*/false));
+
   /* disable throttling emulation to match GetTargetRefreshRate() */
   Core::SetIsThrottlerTempDisabled(true);
   SConfig::GetInstance().bBootToPause = true;
