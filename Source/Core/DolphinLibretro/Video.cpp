@@ -90,13 +90,30 @@ void Init()
   if (renderer == "Hardware")
   {
     retro_hw_context_type preferred = RETRO_HW_CONTEXT_NONE;
-    if (environ_cb(RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER, &preferred) && SetHWRender(preferred))
-      return;
+    if (environ_cb(RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER, &preferred))
+    {
+      switch (preferred)
+      {
 #ifdef HAS_OPENGL
+        case RETRO_HW_CONTEXT_OPENGLES_VERSION:
+          if (SetHWRender(preferred, 3, 2))
+            return;
+          if (SetHWRender(preferred, 3, 1))
+            return;
+          break;
+#endif
+        default:
+          if (SetHWRender(preferred))
+            return;
+      }
+    }
+#if defined(HAS_OPENGL) && !defined(ANDROID) && !defined(__WEBOS__)
     if (SetHWRender(RETRO_HW_CONTEXT_OPENGL_CORE))
       return;
     if (SetHWRender(RETRO_HW_CONTEXT_OPENGL))
       return;
+#endif
+#ifdef HAS_OPENGL
     if (SetHWRender(RETRO_HW_CONTEXT_OPENGLES_VERSION, 3, 2))
       return;
     if (SetHWRender(RETRO_HW_CONTEXT_OPENGLES_VERSION, 3, 1))

@@ -69,6 +69,10 @@ enum SOResultCode : s32
 NetIPTopDevice::NetIPTopDevice(EmulationKernel& ios, const std::string& device_name)
     : EmulationDevice(ios, device_name)
 {
+#if defined(__LIBRETRO__) && defined(SKIP_NETWORK_WORKER_THREAD)
+  return;
+#endif
+
   m_work_queue.Reset("Network Worker", [this](AsyncTask task) {
     const IPCReply reply = task.handler();
     {

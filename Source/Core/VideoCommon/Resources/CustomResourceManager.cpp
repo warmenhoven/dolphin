@@ -12,6 +12,9 @@ namespace VideoCommon
 {
 void CustomResourceManager::Initialize()
 {
+#if defined(__LIBRETRO__) && defined(SKIP_RESOURCE_WORKER_THREAD)
+  return;
+#endif
   m_asset_cache.Initialize();
   m_worker_thread.Reset("resource-worker");
   m_host_config.bits = ShaderHostConfig::GetCurrent().bits;

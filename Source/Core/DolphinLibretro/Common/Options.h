@@ -13,6 +13,18 @@
 #define MODIFIER_DISABLED_CONTROL "Disabled"
 #define MODIFIER_NO_MODIFIER "None"
 
+struct CachedOption
+{
+  std::string raw;
+  long int_value = 0;
+  double double_value = 0.0;
+  bool bool_value = false;
+
+  bool has_int = false;
+  bool has_double = false;
+  bool has_bool = false;
+};
+
 namespace Libretro
 {
 extern retro_environment_t environ_cb;
@@ -252,6 +264,13 @@ namespace gfx_hacks {
   constexpr const char NO_MIPMAPPING[] = "dolphin_no_mipmapping";
 #endif
 }  // namespace gfx_hacks
+
+// ======================================================
+// Graphics > Game Specific
+// ======================================================
+namespace gfx_gamespecific {
+  constexpr const char GFX_PERF_QUERIES_ENABLE[] = "dolphin_per_queries_enable";
+}  // namespace gfx_gamespecific
 
 // ======================================================
 // Wiimote IR / Gyro / Swing

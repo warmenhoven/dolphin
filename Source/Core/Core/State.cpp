@@ -886,6 +886,9 @@ void SetOnAfterLoadCallback(AfterLoadCallbackFunc callback)
 
 void Init(Core::System& system)
 {
+#if defined(__LIBRETRO__) && defined(SKIP_SAVESTATE_THREAD)
+  return;
+#endif
   s_compress_and_dump_thread.Reset("Savestate Worker",
                                    std::bind_front(&CompressAndDumpState, std::ref(system)));
 
