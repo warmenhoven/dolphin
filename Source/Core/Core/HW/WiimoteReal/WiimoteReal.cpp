@@ -661,6 +661,9 @@ void WiimoteScanner::PopulateDevices()
 
 void WiimoteScanner::ThreadFunc()
 {
+#if defined(__LIBRETRO__) && defined(SKIP_WIMOTESCANNER_THREAD)
+  return;
+#endif
   std::thread pool_thread(&WiimoteScanner::PoolThreadFunc, this);
 
   Common::SetCurrentThreadName("Wiimote Scanning Thread");

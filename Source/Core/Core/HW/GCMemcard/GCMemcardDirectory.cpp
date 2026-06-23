@@ -254,6 +254,10 @@ GCMemcardDirectory::GCMemcardDirectory(const std::string& directory, ExpansionIn
   m_dir2 = m_dir1;
   m_bat2 = m_bat1;
 
+#if defined(__LIBRETRO__) && defined(SKIP_GCMEMCARD_THREAD)
+  return;
+#endif
+
   m_flush_thread = std::thread(&GCMemcardDirectory::FlushThread, this);
 }
 
