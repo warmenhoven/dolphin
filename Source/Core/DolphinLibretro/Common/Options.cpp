@@ -7,7 +7,7 @@ namespace Libretro
 {
 namespace Options
 {
-static std::unordered_map<std::string, std::string> optionCache;
+static std::unordered_map<std::string, CachedOption> optionCache;
 static std::unordered_map<std::string, bool> optionDirty;
 
 // Category key constants
@@ -1743,35 +1743,82 @@ error:
 
 void RegisterCache()
 {
-  for (const retro_core_option_v2_definition* def = option_defs;
-       def && def->key;
-       ++def)
+  for (const retro_core_option_v2_definition* def = option_defs; def->key; ++def)
   {
-    std::string val = def->default_value ? def->default_value : "";
-    retro_variable var{ def->key, nullptr };
-    if (::Libretro::environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-      val = var.value;
-    optionCache[def->key] = val;
+    const char* value = def->default_value;
+
+    retro_variable var{def->key};
+
+    if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      value = var.value;
+
+    CachedOption entry;
+    entry.raw = value;
+
+    char* end = nullptr;
+
+    entry.int_value = strtol(value, &end, 10);
+    entry.has_int = (end && *end == '\0');
+
+    entry.double_value = strtod(value, &end);
+    entry.has_double = (end && *end == '\0');
+
+    if (!strcmp(value, "enabled"))
+    {
+      entry.bool_value = true;
+      entry.has_bool = true;
+    }
+    else if (!strcmp(value, "disabled"))
+    {
+      entry.bool_value = false;
+      entry.has_bool = true;
+    }
+
+    optionCache[def->key] = std::move(entry);
+    optionDirty[def->key] = false;
   }
 }
 
 void CheckForUpdatedVariables()
 {
   bool updated = false;
-  if (::Libretro::environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && !updated)
+
+  if (environ_cb)
+    environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated);
+
+  if (!updated)
     return;
 
-  for (auto& [key, oldVal] : optionCache)
+  for (auto& [key, dirty] : optionDirty)
   {
-    retro_variable var{ key.c_str(), nullptr };
-    if (::Libretro::environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    retro_variable var{key.c_str()};
+
+    if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
-      std::string newVal = var.value;
-      if (newVal != oldVal)
+      CachedOption entry;
+      entry.raw = var.value;
+
+      char* end = nullptr;
+
+      entry.int_value = strtol(var.value, &end, 10);
+      entry.has_int = (end && *end == '\0');
+
+      entry.double_value = strtod(var.value, &end);
+      entry.has_double = (end && *end == '\0');
+
+      if (!strcmp(var.value, "enabled"))
       {
-        oldVal = newVal;
-        optionDirty[key] = true;
+        entry.bool_value = true;
+        entry.has_bool = true;
       }
+      else if (!strcmp(var.value, "disabled"))
+      {
+        entry.bool_value = false;
+        entry.has_bool = true;
+      }
+
+      optionCache[key] = std::move(entry);
+      dirty = true;
     }
   }
 }
@@ -1792,12 +1839,10 @@ template <>
 bool GetCached<bool>(const char* key, const bool def)
 {
   auto it = optionCache.find(key);
-  if (it == optionCache.end())
+  if (it == optionCache.end() || !it->second.has_bool)
     return def;
-  const std::string& v = it->second;
-  if (v == "enabled" || v == "true" || v == "1") return true;
-  if (v == "disabled" || v == "false" || v == "0") return false;
-  return def;
+
+  return it->second.bool_value;
 }
 
 // int specialisation
@@ -1805,23 +1850,21 @@ template <>
 int GetCached<int>(const char* key, const int def)
 {
   auto it = optionCache.find(key);
-  if (it == optionCache.end())
+  if (it == optionCache.end() || !it->second.has_int)
     return def;
-  char* end = nullptr;
-  long parsed = strtol(it->second.c_str(), &end, 10);
-  return (end != it->second.c_str()) ? static_cast<int>(parsed) : def;
+
+  return static_cast<int>(it->second.int_value);
 }
 
 // double specialisation
 template <>
-double GetCached<double>(const char* key, double def)
+double GetCached<double>(const char* key, const double def)
 {
   auto it = optionCache.find(key);
-  if (it == optionCache.end())
+  if (it == optionCache.end() || !it->second.has_double)
     return def;
-  char* end = nullptr;
-  double parsed = strtod(it->second.c_str(), &end);
-  return (end != it->second.c_str()) ? parsed : def;
+
+  return it->second.double_value;
 }
 
 // std::string specialisation
@@ -1829,7 +1872,7 @@ template <>
 std::string GetCached<std::string>(const char* key, const std::string def)
 {
   auto it = optionCache.find(key);
-  return (it != optionCache.end()) ? it->second : def;
+  return (it != optionCache.end()) ? it->second.raw : def;
 }
 }  // namespace Options
 

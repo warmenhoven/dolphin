@@ -13,7 +13,9 @@
 #include "Core/Config/WiimoteSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/FreeLookManager.h"
+#include "Core/HW/EXI/EXI.h"
 #include "Core/HW/EXI/EXI_Device.h"
+#include "Core/HW/EXI/EXI_DeviceMic.h"
 #include "Core/HW/GBAPad.h"
 #include "Core/HW/GCKeyboard.h"
 #include "Core/HW/GCPad.h"
@@ -1537,4 +1539,39 @@ void retro_set_controller_port_device_wii(unsigned port, unsigned device)
   bool saveOrLoad = Libretro::Options::GetCached<bool>(Libretro::Options::wiimote::SAVE_LOAD_SETTINGS);
   if (!saveOrLoad)
     ::Wiimote::GetConfig()->SaveConfig();
+}
+
+void poll_microphone()
+{
+  static bool s_wii_speak_enabled = false;
+  static bool s_logi_microphone_enabled = false;
+  static bool s_gc_mic_enabled = false;
+
+  if (Libretro::Options::IsUpdated(Libretro::Options::sysconf::WII_SPEAK_ENABLE))
+    s_wii_speak_enabled = Libretro::Options::GetCached<bool>(Libretro::Options::sysconf::WII_SPEAK_ENABLE);
+
+  if (Libretro::Options::IsUpdated(Libretro::Options::sysconf::WII_LOGI_MICROPHONE_ENABLE))
+    s_logi_microphone_enabled = Libretro::Options::GetCached<bool>(Libretro::Options::sysconf::WII_LOGI_MICROPHONE_ENABLE);
+
+  if (Libretro::Options::IsUpdated(Libretro::Options::sysconf_gc::ENABLE_GAMECUBE_MIC))
+    s_gc_mic_enabled = Libretro::Options::GetCached<bool>(Libretro::Options::sysconf_gc::ENABLE_GAMECUBE_MIC);
+
+  Core::System& system = Core::System::GetInstance();
+
+  if (system.IsWii() && (s_wii_speak_enabled || s_logi_microphone_enabled))
+  {
+    for (auto* mic : Libretro::Input::g_active_microphones)
+      mic->PollRetroArchMic();
+  }
+  else if(s_gc_mic_enabled)
+  {
+    // Poll GC mic
+    auto* exi_device = system.GetExpansionInterface().GetDevice(ExpansionInterface::Slot::B);
+    if (exi_device && Config::Get(Config::GetInfoForEXIDevice(ExpansionInterface::Slot::B))
+      == ExpansionInterface::EXIDeviceType::Microphone)
+    {
+      auto* gc_mic = static_cast<ExpansionInterface::CEXIMic*>(exi_device);
+      gc_mic->PollLibretroMic();
+    }
+  }
 }
