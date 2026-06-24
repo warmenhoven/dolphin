@@ -310,6 +310,13 @@ void retro_run(void)
     Libretro::environ_cb(cmd, &info);
   }
 
+  if (Libretro::Options::IsUpdated(Libretro::Options::gfx_settings::CROP_OVERSCAN))
+  {
+    retro_system_av_info info;
+    retro_get_system_av_info(&info);
+    Libretro::environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
+  }
+
   if (g_widescreen &&
       Libretro::widescreen != (g_widescreen->IsGameWidescreen() || g_Config.bWidescreenHack))
   {
