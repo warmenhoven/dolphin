@@ -806,11 +806,13 @@ if(USE_DISCORD_PRESENCE)
   include_directories(Externals/discord-rpc/include)
 endif()
 
-if(NOT ENABLE_QT)
-  set(USE_MGBA 0)
-endif()
 if(USE_MGBA)
   dolphin_find_optional_system_library(LIBMGBA Externals/mGBA 0.11)
+endif()
+
+if(LIBRETRO)
+  set_property(TARGET mgba APPEND PROPERTY COMPILE_DEFINITIONS DISABLE_THREADING)
+  set_property(TARGET mgba PROPERTY POSITION_INDEPENDENT_CODE ON)
 endif()
 
 find_package(SYSTEMD)

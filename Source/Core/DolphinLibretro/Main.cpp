@@ -211,9 +211,9 @@ void retro_run(void)
       Libretro::Options::gfx_settings::CROP_OVERSCAN);
 
     if (crop_overscan && retro_get_region() == RETRO_REGION_NTSC)
-      g_Config.bCrop = true;
+      g_Config.bCropToAspectRatio = true;
     else
-      g_Config.bCrop = false;
+      g_Config.bCropToAspectRatio = false;
   }
 
   Libretro::Input::Update();
