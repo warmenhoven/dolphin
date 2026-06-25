@@ -85,3 +85,9 @@ endif()
 if(MINGW AND CMAKE_BUILD_TYPE STREQUAL "Debug")
   target_link_options(dolphin_libretro PRIVATE -Wl,--allow-multiple-definition)
 endif()
+
+if(APPLE)
+  target_sources(dolphin_libretro PRIVATE
+    ${CMAKE_SOURCE_DIR}/Source/Core/Common/CommonFuncsObjC.mm
+  )
+endif()

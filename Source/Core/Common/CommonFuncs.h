@@ -15,6 +15,10 @@
 #include <sys/stat.h>
 #endif
 
+#ifdef __APPLE__
+#include "Common/CommonTypes.h"
+#endif
+
 #ifndef _WIN32
 
 // go to debugger mode
@@ -71,6 +75,19 @@ std::string GetWin32ErrorString(unsigned long error_code);
 
 // Obtains a full path to the specified module.
 std::optional<std::wstring> GetModuleName(void* hInstance);
+#endif
+
+#ifdef __APPLE__
+struct MacOSVersion  // NSOperatingSystemVersion
+{
+  s64 major;  // NSInteger majorVersion
+  s64 minor;  // NSInteger minorVersion
+  s64 patch;  // NSInteger patchVersion
+};
+
+// Helper function to get the current macOS version, which is easy to do with
+// from Objective-C code, but a little harder from C++.
+MacOSVersion GetMacOSVersion();
 #endif
 
 #ifdef __LIBRETRO__
