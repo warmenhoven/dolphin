@@ -810,7 +810,7 @@ if(USE_MGBA)
   dolphin_find_optional_system_library(LIBMGBA Externals/mGBA 0.11)
 endif()
 
-if(LIBRETRO)
+if(LIBRETRO AND TARGET mgba)
   set_property(TARGET mgba APPEND PROPERTY COMPILE_DEFINITIONS DISABLE_THREADING)
   set_property(TARGET mgba PROPERTY POSITION_INDEPENDENT_CODE ON)
 endif()
