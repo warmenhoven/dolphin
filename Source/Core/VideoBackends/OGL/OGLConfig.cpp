@@ -22,6 +22,10 @@
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/VideoConfig.h"
 
+#ifdef __LIBRETRO__
+#include "DolphinLibretro/Common/Options.h"
+#endif
+
 namespace OGL
 {
 void InitDriverInfo()
@@ -432,7 +436,12 @@ bool PopulateConfig(GLContext* m_main_gl_context)
     {
       g_ogl_config.eSupportedGLSLVersion = GlslEs320;
       g_ogl_config.bSupportsAEP = GLExtensions::Supports("GL_ANDROID_extension_pack_es31a");
+#if defined(HAS_OPENGL) && defined(__WEBOS__)
+      g_backend_info.bSupportsBindingLayout =
+        Libretro::Options::GetCached<bool>(Libretro::Options::retroarch_core::SUPPORTS_BINDING_LAYOUT, true);
+#else
       g_backend_info.bSupportsBindingLayout = true;
+#endif
       g_ogl_config.bSupportsImageLoadStore = true;
       g_backend_info.bSupportsGeometryShaders = true;
       g_backend_info.bSupportsComputeShaders = true;
@@ -441,8 +450,15 @@ bool PopulateConfig(GLContext* m_main_gl_context)
       g_backend_info.bSupportsPaletteConversion = true;
       g_backend_info.bSupportsSSAA = true;
       g_backend_info.bSupportsFragmentStoresAndAtomics = true;
+#if defined(HAS_OPENGL) && defined(__WEBOS__)
+      g_ogl_config.bSupportsCopySubImage =
+        Libretro::Options::GetCached<bool>(Libretro::Options::retroarch_core::SUPPORTS_COPY_SUB_IMAGE, true);
+      g_ogl_config.bSupportsGLBaseVertex =
+        Libretro::Options::GetCached<bool>(Libretro::Options::retroarch_core::SUPPORTS_GL_BASE_VERTEX, true);
+#else
       g_ogl_config.bSupportsCopySubImage = true;
       g_ogl_config.bSupportsGLBaseVertex = true;
+#endif
       g_ogl_config.bSupportsDebug = true;
       g_ogl_config.bSupportsMSAA = true;
       g_ogl_config.bSupportsTextureStorage = true;

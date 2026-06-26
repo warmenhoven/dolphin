@@ -22,6 +22,7 @@ static constexpr const char* CATEGORY_GFX_ENHANCEMENTS = "graphics_enhancements"
 static constexpr const char* CATEGORY_GFX_HACKS = "graphics_hacks";
 static constexpr const char* CATEGORY_GFX_GAMESPECIFIC = "graphics_gamespecific";
 static constexpr const char* CATEGORY_WIIMOTE = "wiimote";
+static constexpr const char* CATEGORY_RETROARCH_CORE = "retroarch_core";
 
 // V2 Categories
 static const struct retro_core_option_v2_category option_cats[] = {
@@ -79,6 +80,11 @@ static const struct retro_core_option_v2_category option_cats[] = {
     CATEGORY_WIIMOTE,
     "Wiimote IR / Gyro / Swing",
     "Configure Wiimote infrared pointer, gyro and swing settings."
+  },
+  {
+    CATEGORY_RETROARCH_CORE,
+    "RetroArch Core",
+    "Configure settings which are specific to the RetroArch core and do not exist in dolphin standlone."
   },
   { NULL, NULL, NULL }
 };
@@ -238,20 +244,6 @@ static struct retro_core_option_v2_definition option_defs[] = {
     "disabled"
   },
   {
-    Libretro::Options::core::CHEATS_IMPORT,
-    "Core > Automatically Import Cheats into RetroArch",
-    "Automatically Import Cheats into RetroArch",
-    "Import dolphin ini files into RetroArch. Restart core to take effect.",
-    nullptr,
-    CATEGORY_CORE,
-    {
-      { "disabled", nullptr },
-      { "enabled",  nullptr },
-      { nullptr, nullptr }
-    },
-    "enabled"
-  },
-  {
     Libretro::Options::core::SKIP_GC_BIOS,
     "Core > Skip GameCube BIOS",
     "Skip GameCube BIOS",
@@ -392,6 +384,147 @@ static struct retro_core_option_v2_definition option_defs[] = {
       { nullptr,   nullptr }
     },
     "Info"
+  },
+  {
+    Libretro::Options::main_interface::LOG_BOOT,
+    "Interface > Logging > Boot",
+    "Boot Logging",
+    "Enable Boot log messages.",
+    nullptr,
+    CATEGORY_INTERFACE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr,    nullptr }
+    },
+    "enabled"
+  },
+  {
+    Libretro::Options::main_interface::LOG_CORE,
+    "Interface > Logging > Core",
+    "Core Logging",
+    "Enable Core log messages.",
+    nullptr,
+    CATEGORY_INTERFACE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr,    nullptr }
+    },
+    "enabled"
+  },
+  {
+    Libretro::Options::main_interface::LOG_VIDEO,
+    "Interface > Logging > Video",
+    "Video Logging",
+    "Enable Video log messages.",
+    nullptr,
+    CATEGORY_INTERFACE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr,    nullptr }
+    },
+    "enabled"
+  },
+  {
+    Libretro::Options::main_interface::LOG_COMMON,
+    "Interface > Logging > Common",
+    "Common Logging",
+    "Enable Common log messages.",
+    nullptr,
+    CATEGORY_INTERFACE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr,    nullptr }
+    },
+    "enabled"
+  },
+
+  {
+    Libretro::Options::main_interface::LOG_HOST_GPU,
+    "Interface > Logging > Host GPU",
+    "Host GPU Logging",
+    "Enable Host GPU log messages.",
+    nullptr,
+    CATEGORY_INTERFACE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr,    nullptr }
+    },
+    "disabled"
+  },
+  {
+    Libretro::Options::main_interface::LOG_MEMMAP,
+    "Interface > Logging > MemMap",
+    "MemMap Logging",
+    "Enable MemMap log messages.",
+    nullptr,
+    CATEGORY_INTERFACE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr,    nullptr }
+    },
+    "disabled"
+  },
+  {
+    Libretro::Options::main_interface::LOG_DSPINTERFACE,
+    "Interface > Logging > DSP Interface",
+    "DSP Interface Logging",
+    "Enable DSP Interface log messages.",
+    nullptr,
+    CATEGORY_INTERFACE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr,    nullptr }
+    },
+    "disabled"
+  },
+  {
+    Libretro::Options::main_interface::LOG_DSPHLE,
+    "Interface > Logging > DSP HLE",
+    "DSP HLE Logging",
+    "Enable DSP HLE log messages.",
+    nullptr,
+    CATEGORY_INTERFACE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr,    nullptr }
+    },
+    "disabled"
+  },
+  {
+    Libretro::Options::main_interface::LOG_DSPLLE,
+    "Interface > Logging > DSP LLE",
+    "DSP LLE Logging",
+    "Enable DSP LLE log messages.",
+    nullptr,
+    CATEGORY_INTERFACE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr,    nullptr }
+    },
+    "disabled"
+  },
+  {
+    Libretro::Options::main_interface::LOG_DSP_MAIL,
+    "Interface > Logging > DSP MAIL",
+    "DSP MAIL Logging",
+    "Enable DSP MAIL log messages.",
+    nullptr,
+    CATEGORY_INTERFACE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr,    nullptr }
+    },
+    "disabled"
   },
   {
     Libretro::Options::main_interface::ENABLE_DEBUGGING,
@@ -1552,13 +1685,29 @@ static struct retro_core_option_v2_definition option_defs[] = {
     },
     "90"
   },
+
+  // ========== RA only ==========
   {
-    Libretro::Options::wiimote::SAVE_LOAD_SETTINGS,
-    "Wiimote > Load & Prevent Save Settings",
+    Libretro::Options::retroarch_core::CHEATS_IMPORT,
+    "RetroArch Core > Automatically Import Cheats into RetroArch",
+    "Automatically Import Cheats into RetroArch",
+    "Import dolphin ini files into RetroArch. Restart core to take effect.",
+    nullptr,
+    CATEGORY_RETROARCH_CORE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr, nullptr }
+    },
+    "enabled"
+  },
+  {
+    Libretro::Options::retroarch_core::SAVE_LOAD_SETTINGS,
+    "RetroArch core > Load & Prevent Save Settings",
     "Load & Prevent Save Settings",
     "Choose whether to load core settings from GCPad.ini/WiimoteNew.ini and also prevent saving to them. Core options may no longer be reflected correctly in RetroArch interface. Editing ini files incorrectly will likely crash the emulator.",
     nullptr,
-    CATEGORY_WIIMOTE,
+    CATEGORY_RETROARCH_CORE,
     {
       { "disabled", nullptr },
       { "enabled",  nullptr },
@@ -1566,6 +1715,51 @@ static struct retro_core_option_v2_definition option_defs[] = {
     },
     "disabled"
   },
+
+#if defined(HAS_OPENGL) && defined(__WEBOS__)
+  {
+    Libretro::Options::retroarch_core::SUPPORTS_BINDING_LAYOUT,
+    "RetroArch core > Supports Binding Layout",
+    "GLES > Supports Binding Layout",
+    "Enable explicit shader binding layout support. Setting applies only for GLES 3.2 contexts.",
+    nullptr,
+    CATEGORY_RETROARCH_CORE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr,    nullptr }
+    },
+    "disabled"
+  },
+  {
+    Libretro::Options::retroarch_core::SUPPORTS_COPY_SUB_IMAGE,
+    "RetroArch core > Supports CopySubImage",
+    "GLES > Supports CopySubImage",
+    "Enable fast GPU sub-image copy operations. Setting applies only for GLES 3.2 contexts.",
+    nullptr,
+    CATEGORY_RETROARCH_CORE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr,    nullptr }
+    },
+    "disabled"
+  },
+  {
+    Libretro::Options::retroarch_core::SUPPORTS_GL_BASE_VERTEX,
+    "RetroArch core > Supports glDrawElementsBaseVertex",
+    "GLES > Supports glDrawElementsBaseVertex",
+    "Enable support for glDrawElementsBaseVertex. Setting applies only for GLES 3.2 contexts.",
+    nullptr,
+    CATEGORY_RETROARCH_CORE,
+    {
+      { "disabled", nullptr },
+      { "enabled",  nullptr },
+      { nullptr,    nullptr }
+    },
+    "disabled"
+  },
+#endif  // HAS_OPENGL/__WEBOS__
 
   { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, {{0}}, nullptr }
 };
