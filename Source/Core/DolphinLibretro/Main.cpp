@@ -610,7 +610,7 @@ static void enable_cheat_by_code(bool enabled, const char* code)
 // reset cheats to off
 void retro_cheat_reset(void)
 {
-  const bool importCheats = Libretro::GetOption<bool>(Libretro::Options::core::CHEATS_IMPORT, true);
+  const bool importCheats = Libretro::GetOption<bool>(Libretro::Options::retroarch_core::CHEATS_IMPORT, true);
 
   if (!Config::AreCheatsEnabled() || !importCheats)
     return;
@@ -632,7 +632,7 @@ void retro_cheat_set(unsigned index, bool enabled, const char *code)
     return;
   }
 
-  const bool importCheats = Libretro::GetOption<bool>(Libretro::Options::core::CHEATS_IMPORT, true);
+  const bool importCheats = Libretro::GetOption<bool>(Libretro::Options::retroarch_core::CHEATS_IMPORT, true);
   if (!importCheats)
   {
     OSD::AddMessage("You cannot apply any cheats until you enabled the following option:\n"

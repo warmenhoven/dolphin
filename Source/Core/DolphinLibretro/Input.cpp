@@ -983,7 +983,7 @@ void UpdateWiimoteMappings(const WiimoteUpdateFlags& f, unsigned port, unsigned 
   {
     wm->UpdateReferences(g_controller_interface);
 
-    bool saveOrLoad = Libretro::Options::GetCached<bool>(Libretro::Options::wiimote::SAVE_LOAD_SETTINGS);
+    bool saveOrLoad = Libretro::Options::GetCached<bool>(Libretro::Options::retroarch_core::SAVE_LOAD_SETTINGS);
     if (!saveOrLoad)
       ::Wiimote::GetConfig()->SaveConfig();
   }
@@ -1150,7 +1150,7 @@ void refresh_all_wiimote_flags(unsigned port, unsigned device)
 // a Device= line still bind to the correct libretro joypad.
 static WiimoteEmu::Wiimote* load_saved_controller_config(unsigned port, unsigned device)
 {
-  bool saveOrLoad = Libretro::Options::GetCached<bool>(Libretro::Options::wiimote::SAVE_LOAD_SETTINGS);
+  bool saveOrLoad = Libretro::Options::GetCached<bool>(Libretro::Options::retroarch_core::SAVE_LOAD_SETTINGS);
   if (!saveOrLoad)
     return nullptr;
 
@@ -1292,7 +1292,7 @@ void retro_set_controller_port_device_gc(unsigned port, unsigned device)
 
   gcPad->UpdateReferences(g_controller_interface);
 
-  bool saveOrLoad = Libretro::Options::GetCached<bool>(Libretro::Options::wiimote::SAVE_LOAD_SETTINGS);
+  bool saveOrLoad = Libretro::Options::GetCached<bool>(Libretro::Options::retroarch_core::SAVE_LOAD_SETTINGS);
   if (!saveOrLoad)
     return Pad::GetConfig()->SaveConfig();
 }
@@ -1563,7 +1563,7 @@ void retro_set_controller_port_device_wii(unsigned port, unsigned device)
   }
 
   wm->UpdateReferences(g_controller_interface);
-  bool saveOrLoad = Libretro::Options::GetCached<bool>(Libretro::Options::wiimote::SAVE_LOAD_SETTINGS);
+  bool saveOrLoad = Libretro::Options::GetCached<bool>(Libretro::Options::retroarch_core::SAVE_LOAD_SETTINGS);
   if (!saveOrLoad)
     ::Wiimote::GetConfig()->SaveConfig();
 }

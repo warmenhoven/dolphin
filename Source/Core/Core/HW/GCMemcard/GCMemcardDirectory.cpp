@@ -294,7 +294,11 @@ GCMemcardDirectory::~GCMemcardDirectory()
 {
   m_exiting.Set();
   m_flush_trigger.Set();
-  m_flush_thread.join();
+
+#ifdef __LIBRETRO__
+  if (m_flush_thread.joinable())
+#endif
+    m_flush_thread.join();
 
   FlushToFile();
 }

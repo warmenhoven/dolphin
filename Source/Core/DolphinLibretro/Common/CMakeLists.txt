@@ -8,5 +8,10 @@ target_include_directories(dolphin_libretro_common PUBLIC
   ${LIBRETRO_INCLUDE_DIR}
 )
 
+target_include_directories(videoogl PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${LIBRETRO_INCLUDE_DIR}
+)
+
 # needed for windows cmake compile
 target_link_libraries(dolphin_libretro_common fmt)

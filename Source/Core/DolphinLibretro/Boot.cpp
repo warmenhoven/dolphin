@@ -611,7 +611,7 @@ bool retro_load_game(const struct retro_game_info* game)
 
   Libretro::Input::InitStage2();
 
-  const bool importCheats = Libretro::GetOption<bool>(core::CHEATS_IMPORT, true);
+  const bool importCheats = Libretro::GetOption<bool>(retroarch_core::CHEATS_IMPORT, true);
 
   if (importCheats)
   {
