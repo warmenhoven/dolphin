@@ -69,12 +69,25 @@ std::vector<std::string> ReadM3UFile(const std::string& m3u_path,
 {
   std::vector<std::string> result;
   std::vector<std::string> nonexistent;
+  std::vector<std::string> lines;
+  std::string newline;
 
-  std::ifstream s;
-  File::OpenFStream(s, m3u_path, std::ios_base::in);
+#ifdef __LIBRETRO__
+  if (Libretro::VFile::HasVFS())
+  {
+    lines = Libretro::VFile::ReadLines(m3u_path);
+  }
+  else
+#endif
+  {
+    std::ifstream s;
+    File::OpenFStream(s, m3u_path, std::ios_base::in);
 
-  std::string line;
-  while (std::getline(s, line))
+    while (std::getline(s, newline))
+      lines.push_back(newline);
+  }
+
+  for (std::string& line : lines)
   {
     // This is the UTF-8 representation of U+FEFF.
     constexpr std::string_view utf8_bom = "\xEF\xBB\xBF";

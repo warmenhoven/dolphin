@@ -75,5 +75,7 @@ s64 Truncate(retro_vfs_file_handle* vfs_handle, const u64 size);
 // IOS::HLE::FS
 std::string GetPath(::retro_vfs_file_handle* handle);
 
+std::vector<std::string> ReadLines(const std::string& filename);
+
 } // namespace File
 } // namespace Libretro
