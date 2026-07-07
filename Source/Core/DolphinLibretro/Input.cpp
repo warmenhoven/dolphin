@@ -634,6 +634,8 @@ void Shutdown()
     g_init_wiimotes = false;
   }
 
+  s_sensor_init_pending = false;
+
 #if defined(__LIBUSB__)
   GCAdapter::ResetRumble();
 #endif

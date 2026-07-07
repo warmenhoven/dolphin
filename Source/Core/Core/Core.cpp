@@ -1170,4 +1170,24 @@ CPUThreadGuard::~CPUThreadGuard()
     RestoreStateAndUnlock(m_system, m_was_unpaused);
 }
 
+#ifdef __LIBRETRO__
+void SingleCorePostRunShutdown()
+{
+#ifdef USE_MEMORYWATCHER
+  s_memory_watcher.reset();
+#endif
+
+  if (EMM::IsExceptionHandlerSupported())
+    EMM::UninstallExceptionHandler();
+
+  if (GDBStub::IsActive())
+  {
+    INFO_LOG_FMT(CONSOLE, "{}", StopMessage(true, "Stopping GDB ..."));
+    GDBStub::Deinit();
+    INFO_LOG_FMT(CONSOLE, "{}", StopMessage(true, "GDB stopped."));
+    INFO_LOG_FMT(GDB_STUB, "Killed by CPU shutdown");
+  }
+}
+#endif
+
 }  // namespace Core

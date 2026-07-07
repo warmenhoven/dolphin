@@ -653,6 +653,17 @@ void retro_unload_game(void)
   Libretro::Log::Shutdown();
   UICommon::ShutdownControllers();
   UICommon::Shutdown();
+
+  if (!system.IsDualCoreMode())
+  {
+    Core::SingleCorePostRunShutdown();
+
+    // otherwise it is still called CPU-GPU Thread
+    Common::SetCurrentThreadName("retroarch");
+  }
+
+  Core::UndeclareAsCPUThread();
+  Core::UndeclareAsGPUThread();
 }
 
 namespace Libretro
