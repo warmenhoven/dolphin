@@ -403,6 +403,49 @@ bool ReadFileToString(const std::string& filename, std::string& str)
   return read == size;
 }
 
+std::vector<std::string> ReadLines(const std::string& filename)
+{
+  DEBUG_LOG_FMT(COMMON, "ReadLines {}", filename);
+
+  std::vector<std::string> lines;
+
+  if (!vfs_interface)
+    return lines;
+
+  retro_vfs_file_handle* f =
+    vfs_interface->open(filename.c_str(),
+                        RETRO_VFS_FILE_ACCESS_READ,
+                        RETRO_VFS_FILE_ACCESS_HINT_NONE);
+
+  if (!f)
+  {
+    ERROR_LOG_FMT(COMMON, "ReadLines {} failed to open", filename.c_str());
+    return lines;
+  }
+
+  int64_t size = vfs_interface->size(f);
+  if (size <= 0)
+  {
+    vfs_interface->close(f);
+    return lines;
+  }
+
+  std::string buffer(size, '\0');
+  int64_t read = vfs_interface->read(f, buffer.data(), size);
+  vfs_interface->close(f);
+
+  if (read != size)
+    return lines;
+
+  std::stringstream ss(buffer);
+  std::string line;
+
+  while (std::getline(ss, line))
+    lines.push_back(line);
+
+  return lines;
+}
+
 bool CreateDirs(std::string_view path)
 {
   DEBUG_LOG_FMT(COMMON, "CreateDirs {}", path);
