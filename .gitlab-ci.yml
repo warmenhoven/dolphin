@@ -99,7 +99,8 @@ android-arm64-v8a:
     - .libretro-android-cmake-arm64-v8a
     - .core-defs
   variables:
-    NDK_ROOT: /android-sdk-linux/ndk/$ANDROID_NDK_NEXT
+    ANDROID_NDK_VERSION: 26.2.11394342
+    NDK_ROOT: /android-sdk-linux/ndk/$ANDROID_NDK_VERSION
 
 # iOS arm64
 libretro-build-ios-arm64:
