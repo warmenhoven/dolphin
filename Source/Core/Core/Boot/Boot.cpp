@@ -93,7 +93,7 @@ std::vector<std::string> ReadM3UFile(const std::string& m3u_path,
     constexpr std::string_view utf8_bom = "\xEF\xBB\xBF";
 
 #ifndef _WIN32
-    if (!line.empty() && line.back() == '\r')
+    if (line.ends_with('\r'))
       line.pop_back();
 #endif
 
