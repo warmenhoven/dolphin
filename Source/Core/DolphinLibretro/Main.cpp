@@ -86,6 +86,30 @@ void retro_set_environment(retro_environment_t cb)
 #ifdef PERF_TEST
   environ_cb(RETRO_ENVIRONMENT_GET_PERF_INTERFACE, &perf_cb);
 #endif
+static const struct retro_subsystem_memory_info gbp_gba_memory[] = {
+  {"srm", RETRO_MEMORY_SAVE_RAM},
+};
+static const struct retro_subsystem_rom_info gbp_roms[] = {
+  {"GBA ROM", "gba|gbc|gb|zip|7z",
+    true,
+    true,
+    false,
+    gbp_gba_memory, 1},
+  {"GameCube Disc", "rvz|gcm|iso|ciso|wbfs|gcz|tgc|m3u",
+    true,
+    false,
+    true,
+    nullptr, 0},
+};
+static const struct retro_subsystem_info subsystems[] = {
+  {
+    "Game Boy Player",
+    "GBP",
+    gbp_roms, 2,
+    Libretro::g_gbplayer_subsystem_id
+  },
+  {nullptr, nullptr, nullptr, 0, 0}};
+cb(RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO, (void*)subsystems);
 }
 
 void retro_init(void)

@@ -8,6 +8,7 @@
 #include "Common/CommonPaths.h"
 #include "Core/CommonTitles.h"
 #include "Common/FileUtil.h"
+#include "Common/StringUtil.h"
 #include "Common/Version.h"
 #include "Core/Boot/Boot.h"
 #include "Core/BootManager.h"
@@ -19,6 +20,7 @@
 #include "Core/GeckoCodeConfig.h"
 #include "Core/HW/DVD/DVDInterface.h"
 #include "Core/HW/EXI/EXI_Device.h"
+#include "Core/HW/HSP/HSP_Device.h"
 #include "Core/HW/VideoInterface.h"
 #include "Core/HW/WiimoteReal/WiimoteReal.h"
 #include "Core/PowerPC/PowerPC.h"
@@ -52,6 +54,10 @@ static void InitDiskControlInterface();
 static unsigned disk_index = 0;
 static bool eject_state;
 static std::vector<std::string> disk_paths;
+
+// GBPlayer
+static std::string GBPlayer_rom_path;
+static bool GBPlayer_active;
 
 // silence forward declaration warnings
 void reload_cheats_from_ini();
@@ -168,12 +174,64 @@ void generate_cht_from_ini(std::string fileName)
 bool retro_load_game(const struct retro_game_info* game)
 {
   const char* save_dir = NULL;
+  const char* gba_save_dir = NULL;
   const char* system_dir = NULL;
   const char* core_assets_dir = NULL;
+  std::string rebuild_save_dir;
   std::string user_dir;
   std::string sys_dir;
 
-  Libretro::environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &save_dir);
+  /*
+   *  If the GBPlayer is active, we try to reconstruct the GC save dir location
+   *  with regards to content sorting and core sorting. If we do not do this,
+   *  there will be a User directory with GC saves in the GB/GBC/GBA rom save path
+   *  when a user has content/core sorting enabled. Since the user is trying to avoid
+   *  said behavior actively if those sorting options are enabled,
+   *  we should seperate them accordingly.
+   */
+  if (Libretro::GBPlayer_active)
+  {
+    std::filesystem::path gba_content_dir = std::filesystem::path("");
+    if (!Libretro::GBPlayer_rom_path.empty())
+      gba_content_dir = std::filesystem::path(Libretro::GBPlayer_rom_path).parent_path().filename().string();
+
+    Libretro::environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &gba_save_dir);
+    std::filesystem::path base = std::filesystem::path(gba_save_dir);
+
+    bool core_sort = false;
+    retro_system_info sys_info{};
+    retro_get_system_info(&sys_info);
+    const std::string library_name = sys_info.library_name;
+
+    if (!base.empty() && !library_name.empty())
+      core_sort = Common::CaseInsensitiveEquals(base.filename().string(), library_name);
+    if (core_sort)
+      base = base.parent_path();
+
+    bool content_sort = false;
+    std::string gc_content_dir;
+    if (!gba_content_dir.empty() && !base.empty())
+      content_sort = Common::CaseInsensitiveEquals(base.filename().string(), gba_content_dir.string());
+    if (content_sort)
+    {
+      gc_content_dir = std::filesystem::path(game->path).parent_path().filename().string();
+      base = base.parent_path();
+    }
+
+    rebuild_save_dir = base.string();
+    if (content_sort)
+      rebuild_save_dir = rebuild_save_dir + DIR_SEP + gc_content_dir;
+    if (core_sort)
+      rebuild_save_dir = rebuild_save_dir + DIR_SEP + library_name;
+
+    save_dir = rebuild_save_dir.c_str();
+    INFO_LOG_FMT(BOOT, "GBPlayer: GC save dir reconstructed to: '{}'", save_dir);
+  }
+  else
+  {
+    Libretro::environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &save_dir);
+  }
+
   Libretro::environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &system_dir);
   Libretro::environ_cb(RETRO_ENVIRONMENT_GET_CORE_ASSETS_DIRECTORY, &core_assets_dir);
   Libretro::InitDiskControlInterface();
@@ -212,6 +270,22 @@ bool retro_load_game(const struct retro_game_info* game)
   UICommon::CreateDirectories();
   UICommon::Init();
   Libretro::Log::Init();
+
+  if (Libretro::GBPlayer_active)
+  {
+    Config::SetBase(Config::MAIN_GBA_ROM_PATHS[Config::GBPLAYER_GBA_INDEX], Libretro::GBPlayer_rom_path);
+    INFO_LOG_FMT(BOOT, "GBPlayer: GBA ROM path applied from subsystem: '{}'", Libretro::GBPlayer_rom_path);
+    Config::SetBase(Config::MAIN_GBA_SAVES_PATH, std::string(gba_save_dir));
+    INFO_LOG_FMT(BOOT, "GBPlayer: ROM save set to: '{}'", gba_save_dir);
+    // In order to prevent confusion for the settings of the save location between RA and the
+    // emulator we just turn this off
+    Config::SetBase(Config::MAIN_GBA_SAVES_IN_ROM_PATH, false);
+  }
+  else
+  {
+    Config::SetBase(Config::MAIN_GBA_ROM_PATHS[Config::GBPLAYER_GBA_INDEX], std::string{});
+  }
+
   Discord::SetDiscordPresenceEnabled(false);
   Common::SetEnableAlert(false);
   Common::SetAbortOnPanicAlert(false);
@@ -621,10 +695,44 @@ bool retro_load_game(const struct retro_game_info* game)
   return true;
 }
 
-bool retro_load_game_special(unsigned game_type, const struct retro_game_info* info,
-                             size_t num_info)
+bool retro_load_game_special(unsigned game_type, const struct retro_game_info* info, size_t num_info)
 {
-  return false;
+  if (game_type != Libretro::g_gbplayer_subsystem_id)
+  {
+    ERROR_LOG_FMT(BOOT, "retro_load_game_special: unknown game_type {}", game_type);
+    return false;
+  }
+  if (num_info < 1 || !info)
+  {
+    ERROR_LOG_FMT(BOOT, "retro_load_game_special: no content info");
+    return false;
+  }
+
+  const retro_game_info* gba_slot = (num_info >= 2 && info[0].path && *info[0].path) ? &info[0] : nullptr;
+
+  const retro_game_info* gc_slot = (info[1].path && *info[1].path) ? &info[1] : nullptr;
+
+  if (!gc_slot)
+  {
+    ERROR_LOG_FMT(BOOT, "GBPlayer: no GC disc path provided in slot 0");
+    return false;
+  }
+
+  INFO_LOG_FMT(BOOT, "GBPlayer: GC disc  = '{}'", gc_slot->path);
+  if (gba_slot)
+  {
+    Libretro::GBPlayer_rom_path = gba_slot->path;
+    INFO_LOG_FMT(BOOT, "GBPlayer: ROM = '{}'", gba_slot->path);
+  }
+  else
+  {
+    Libretro::GBPlayer_rom_path.clear();
+    INFO_LOG_FMT(BOOT, "GBPlayer: no ROM");
+  }
+
+  Libretro::GBPlayer_active = true;
+
+  return retro_load_game(gc_slot);
 }
 
 void retro_unload_game(void)
