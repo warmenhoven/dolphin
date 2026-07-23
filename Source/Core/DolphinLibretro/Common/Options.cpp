@@ -1772,7 +1772,11 @@ static struct retro_core_option_v2_definition option_defs[] = {
       { "enabled",  nullptr },
       { nullptr, nullptr }
     },
+#if defined(ANDROID)
+    "enabled" // enable by default because of SAF
+#else
     "disabled"
+#endif
   },
 
   { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, {{0}}, nullptr }
