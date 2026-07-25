@@ -21,7 +21,7 @@ include:
   # Linux 64-bit
   - project: 'libretro-infrastructure/ci-templates'
     file: '/linux-cmake.yml'
-    
+
   # MacOS x64
   - project: 'libretro-infrastructure/ci-templates'
     file: 'osx-cmake-x86.yml'
@@ -72,6 +72,18 @@ libretro-build-linux-x64:
     - .libretro-linux-cmake-x86_64
     - .core-defs
   image: $CI_SERVER_HOST:5050/libretro-infrastructure/libretro-build-amd64-ubuntu:backports
+  variables:
+    CC: /usr/bin/gcc-12
+    CXX: /usr/bin/g++-12
+
+# Linux ARM 64-bit
+libretro-build-linux-aarch64:
+  extends:
+    - .libretro-linux-cmake-aarch64
+    - .core-defs
+  # No image override: unlike the x64 image, the aarch64 one already ships GCC 12
+  # (from ppa:ubuntu-toolchain-r/test in its Dockerfile), and it has no
+  # :backports tag at all.
   variables:
     CC: /usr/bin/gcc-12
     CXX: /usr/bin/g++-12
