@@ -121,8 +121,9 @@ android-armv7a:
     - .core-defs
   variables:
     ANDROID_NDK_VERSION: 29.0.14206865
+    API_LEVEL: 24
+    CORE_ARGS: -DLIBRETRO=ON -DENABLE_LTO=ON -DENABLE_GENERIC=ON
     NDK_ROOT: /android-sdk-linux/ndk/$ANDROID_NDK_VERSION
-    CORE_ARGS: "$CORE_ARGS -DENABLE_GENERIC=ON"
 
 # iOS arm64
 libretro-build-ios-arm64:
