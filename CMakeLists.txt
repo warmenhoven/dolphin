@@ -554,6 +554,11 @@ if(NOT ANDROID AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows")
   add_definitions(-D_LARGEFILE_SOURCE)
 endif()
 
+if(LIBRETRO AND ANDROID AND CMAKE_ANDROID_ARCH_ABI STREQUAL "armeabi-v7a")
+  add_definitions(-D_FILE_OFFSET_BITS=64)
+  add_definitions(-D_LARGEFILE_SOURCE)
+endif()
+
 ########################################
 # Dependency checking
 #
