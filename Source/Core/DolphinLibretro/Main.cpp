@@ -75,6 +75,9 @@ namespace Libretro
 extern retro_environment_t environ_cb;
 static bool widescreen;
 double g_core_refresh_rate{0};
+// Reset per game (see retro_run): the first refresh-rate settle after boot must not
+// trigger a mode-family reinit, only a real in-game 50<->60 switch should.
+static bool s_refresh_rate_settled = false;
 extern void reload_cheats_from_ini();
 }  // namespace Libretro
 
@@ -141,18 +144,16 @@ void retro_get_system_av_info(retro_system_av_info* info)
   int efbScale = Libretro::Options::GetCached<int>(
     Libretro::Options::gfx_settings::EFB_SCALE);
 
-  int base_height = EFB_HEIGHT;
-  const bool crop_overscan = Libretro::Options::GetCached<bool>(
-    Libretro::Options::gfx_settings::CROP_OVERSCAN);
+  int base_height = Libretro::Video::GetAdjustedBaseHeight();
 
-  if (crop_overscan && retro_get_region() == RETRO_REGION_NTSC)
-    base_height = 480;
+  // Fixed max (>= any runtime height) so base can grow via SET_GEOMETRY alone.
+  int max_height = base_height > 576 ? base_height : 576;
 
   info->geometry.base_width  = EFB_WIDTH * efbScale;
   info->geometry.base_height = base_height * efbScale;
 
-  info->geometry.max_width   = info->geometry.base_width;
-  info->geometry.max_height  = info->geometry.base_height;
+  info->geometry.max_width   = EFB_WIDTH * efbScale;
+  info->geometry.max_height  = max_height * efbScale;
 
   if (g_widescreen)
     Libretro::widescreen = g_widescreen->IsGameWidescreen() || g_Config.bWidescreenHack;
@@ -205,16 +206,8 @@ void retro_run(void)
       Libretro::Options::gfx_settings::WIDESCREEN_HACK);
   }
 
-  if (Libretro::Options::IsUpdated(Libretro::Options::gfx_settings::CROP_OVERSCAN))
-  {
-    const bool crop_overscan = Libretro::Options::GetCached<bool>(
-      Libretro::Options::gfx_settings::CROP_OVERSCAN);
-
-    if (crop_overscan && retro_get_region() == RETRO_REGION_NTSC)
-      g_Config.bCropToAspectRatio = true;
-    else
-      g_Config.bCropToAspectRatio = false;
-  }
+  // Crop to 4:3 when advertising 480-line geometry (NTSC / PAL60), tracked per frame.
+  g_Config.bCropToAspectRatio = (Libretro::Video::GetAdjustedBaseHeight() == 480);
 
   Libretro::Input::Update();
 
@@ -254,6 +247,7 @@ void retro_run(void)
       Common::SleepCurrentThread(100);
 
     Libretro::g_core_refresh_rate = system.GetVideoInterface().GetTargetRefreshRate();
+    Libretro::s_refresh_rate_settled = false;
 
     // Expose GameCube and Wii memory maps to libretro
     {
@@ -314,7 +308,8 @@ void retro_run(void)
   {
     retro_system_av_info info;
     retro_get_system_av_info(&info);
-    Libretro::environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
+    // SET_GEOMETRY, not SET_SYSTEM_AV_INFO: the reinit would drop KMS to 240p.
+    Libretro::environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &info);
   }
 
   if (g_widescreen &&
@@ -330,11 +325,31 @@ void retro_run(void)
 
   if (round(Libretro::g_core_refresh_rate * 1e6) != round(new_rate * 1e6))
   {
+    const double old_rate = Libretro::g_core_refresh_rate;
+
+    NOTICE_LOG_FMT(VIDEO, "Target refresh rate changed: {:.4f} Hz -> {:.4f} Hz",
+                   old_rate, new_rate);
+
     Libretro::g_core_refresh_rate = new_rate;
+
+    // Re-pace the audio-callback frame timing to the new rate (PAL60 50->60).
+    if (Libretro::FrameTiming::IsEnabled() && new_rate > 1.0)
+      Libretro::FrameTiming::target_frame_duration_usec.store(
+          static_cast<retro_usec_t>(lround(1e6 / new_rate)), std::memory_order_relaxed);
 
     retro_system_av_info info;
     retro_get_system_av_info(&info);
-    Libretro::environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
+
+    // 50<->60 switch needs a new CRT mode family: only SET_SYSTEM_AV_INFO carries
+    // the fps switchres uses, then SET_GEOMETRY rebuilds the surface its reinit drops.
+    // First settle after boot keeps the initial mode, so geometry-only (no reinit flash).
+    const bool crosses_50_60 =
+      Libretro::s_refresh_rate_settled && ((old_rate > 55.0) != (new_rate > 55.0));
+    Libretro::s_refresh_rate_settled = true;
+
+    if (crosses_50_60)
+      Libretro::environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
+    Libretro::environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &info);
   }
 
   WiimoteUpdateFlags flags;

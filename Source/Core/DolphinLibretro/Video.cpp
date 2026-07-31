@@ -36,7 +36,9 @@
 #include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
+#include "Core/HW/VideoInterface.h"
 #include "Core/Host.h"
+#include "Core/System.h"
 #include "DolphinLibretro/Common/Options.h"
 #include "DolphinLibretro/VideoContexts/ContextStatus.h"
 
@@ -76,10 +78,15 @@ int GetAdjustedBaseHeight()
 
   if (crop_overscan)
   {
-    if (retro_get_region() == RETRO_REGION_NTSC)
-      return 480;
-    else
-      return 576;
+    // A 480-line signal (native NTSC, or a PAL game that switched to PAL60/EuRGB60 at runtime)
+    // should report 480 so the frontend / CRT switchres picks a 480i@60 mode instead of stretching
+    // a 576-line PAL mode down to ~52 Hz. Detect the 60 Hz output from the current refresh rate,
+    // since the cartridge region stays PAL even after the in-game 60 Hz switch.
+    const bool is_480_line_output =
+      retro_get_region() == RETRO_REGION_NTSC ||
+      Core::System::GetInstance().GetVideoInterface().GetTargetRefreshRate() > 55.0;
+
+    return is_480_line_output ? 480 : 576;
   }
 
   return EFB_HEIGHT;
