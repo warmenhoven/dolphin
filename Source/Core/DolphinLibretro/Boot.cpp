@@ -293,13 +293,19 @@ bool retro_load_game(const struct retro_game_info* game)
     bool yes_no, Common::MsgType style) -> bool
   {
     // Log the message instead of showing a popup
-    INFO_LOG_FMT(COMMON, "Suppressed popup: {} - {}", caption, text);
+    WARN_LOG_FMT(COMMON, "Suppressed popup: {} - {}", caption, text);
     return true; // Always "continue"
   });
 
-  INFO_LOG_FMT(COMMON, "SCM Git revision: {}", Common::GetScmRevGitStr());
-  INFO_LOG_FMT(COMMON, "User Directory set to '{}'", user_dir);
-  INFO_LOG_FMT(COMMON, "System Directory set to '{}'", sys_dir);
+  NOTICE_LOG_FMT(BOOT, "SCM Git revision: {}", Common::GetScmRevGitStr());
+  NOTICE_LOG_FMT(BOOT, "User Directory set to '{}'", user_dir);
+  NOTICE_LOG_FMT(BOOT, "System Directory set to '{}'", sys_dir);
+
+  const std::string codehandler = std::string(sys_dir) + DIR_SEP GECKO_CODE_HANDLER;
+
+  if (!File::Exists(codehandler))
+    ERROR_LOG_FMT(BOOT, "Core file {} missing! Go to Online Updater -> Core System Files Downloader -> Install Dolphin.zip",
+      GECKO_CODE_HANDLER);
 
   // Main.Core
   Config::SetBase(Config::MAIN_CPU_CORE,
@@ -599,9 +605,9 @@ bool retro_load_game(const struct retro_game_info* game)
     OSD::AddMessage("CPU: Just in time compiler disabled as unavailable on your system", OSD::Duration::NORMAL);
   }
 #endif
-  INFO_LOG_FMT(BOOT, "CPU Core: {}", Libretro::Options::CPUCoreToString(Config::Get(Config::MAIN_CPU_CORE)));
-  INFO_LOG_FMT(BOOT, "Fastmem enabled = {}", (Config::Get(Config::MAIN_FASTMEM)) ? "Yes" : "No");
-  INFO_LOG_FMT(BOOT, "JIT debug enabled = {}", Config::IsDebuggingEnabled() ? "Yes" : "No");
+  NOTICE_LOG_FMT(BOOT, "CPU Core: {}", Libretro::Options::CPUCoreToString(Config::Get(Config::MAIN_CPU_CORE)));
+  NOTICE_LOG_FMT(BOOT, "Fastmem enabled = {}", (Config::Get(Config::MAIN_FASTMEM)) ? "Yes" : "No");
+  NOTICE_LOG_FMT(BOOT, "JIT debug enabled = {}", Config::IsDebuggingEnabled() ? "Yes" : "No");
 
   Libretro::FrameTiming::Init();
   Libretro::Audio::Init();

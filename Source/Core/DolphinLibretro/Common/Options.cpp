@@ -383,7 +383,7 @@ static struct retro_core_option_v2_definition option_defs[] = {
 #endif
       { nullptr,   nullptr }
     },
-    "Info"
+    "4"
   },
   {
     Libretro::Options::main_interface::LOG_BOOT,

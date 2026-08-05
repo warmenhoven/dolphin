@@ -304,7 +304,7 @@ void retro_run(void)
 
   if(!Libretro::g_emuthread_launched)
   {
-    DEBUG_LOG_FMT(COMMON, "retro_run() - waiting for g_emuthread_launched");
+    DEBUG_LOG_FMT(BOOT, "retro_run() - waiting for g_emuthread_launched");
     return;
   }
 
