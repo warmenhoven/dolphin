@@ -465,12 +465,12 @@ void Init(const WindowSystemInfo& wsi)
 {
   if (!environ_cb(RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE, &rumble))
   {
-    WARN_LOG_FMT(COMMON, "RetroArch does not support RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE.");
+    WARN_LOG_FMT(BOOT, "RetroArch does not support RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE.");
   }
 
   if (!environ_cb(RETRO_ENVIRONMENT_GET_SENSOR_INTERFACE, &sensor_interface))
   {
-    WARN_LOG_FMT(COMMON, "RetroArch does not support RETRO_ENVIRONMENT_GET_SENSOR_INTERFACE.");
+    WARN_LOG_FMT(BOOT, "RetroArch does not support RETRO_ENVIRONMENT_GET_SENSOR_INTERFACE.");
   }
 
   retro_microphone_interface mic_iface{RETRO_MICROPHONE_INTERFACE_VERSION};
@@ -489,7 +489,7 @@ void Init(const WindowSystemInfo& wsi)
   }
   else
   {
-    WARN_LOG_FMT(IOS_USB, "Microphone interface NOT available");
+    WARN_LOG_FMT(BOOT, "Microphone interface NOT available");
   }
 
   g_controller_interface.Initialize(wsi);
@@ -545,7 +545,7 @@ void InitStage2()
       };
 
       if (!environ_cb(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO, (void*)ports))
-        WARN_LOG_FMT(COMMON, "RetroArch does not support RETRO_ENVIRONMENT_SET_CONTROLLER_INFO.");
+        WARN_LOG_FMT(BOOT, "RetroArch does not support RETRO_ENVIRONMENT_SET_CONTROLLER_INFO.");
     }
     else // Both Wii devices and GC controllers listed in ports 1-4, ports 5-8 are unused
     {
@@ -568,7 +568,7 @@ void InitStage2()
       };
 
       if (!environ_cb(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO, (void*)ports))
-        WARN_LOG_FMT(COMMON, "RetroArch does not support RETRO_ENVIRONMENT_SET_CONTROLLER_INFO.");
+        WARN_LOG_FMT(BOOT, "RetroArch does not support RETRO_ENVIRONMENT_SET_CONTROLLER_INFO.");
     }
   }
   else
@@ -582,7 +582,7 @@ void InitStage2()
     };
 
     if (!environ_cb(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO, (void*)ports))
-      WARN_LOG_FMT(COMMON, "RetroArch does not support RETRO_ENVIRONMENT_SET_CONTROLLER_INFO.");
+      WARN_LOG_FMT(BOOT, "RetroArch does not support RETRO_ENVIRONMENT_SET_CONTROLLER_INFO.");
   }
 }
 
@@ -615,7 +615,7 @@ void InitSensors()
         g_controller_interface.AddDevice(sensor);
       }
 
-      INFO_LOG_FMT(COMMON, "Sensor interface: Port: {} ACCELEROMETER: {} GYROSCOPE: {}", i,
+      INFO_LOG_FMT(BOOT, "Sensor interface: Port: {} ACCELEROMETER: {} GYROSCOPE: {}", i,
         sensor_enabled[i][SENSOR_ACCELEROMETER], sensor_enabled[i][SENSOR_GYRO]);
     }
   }
