@@ -95,11 +95,6 @@ void* AllocateExecutableMemory(size_t size)
 #endif
 #if defined(_WIN32)
   void* ptr = VirtualAlloc(nullptr, size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-#elif defined(__APPLE__) && defined(__aarch64__) && !defined(IPHONEOS)
-  // macOS ARM: mmap R-X for dual mapping (no MAP_JIT, which prevents vm_remap)
-  void* ptr = mmap(nullptr, size, PROT_READ | PROT_EXEC, MAP_ANON | MAP_PRIVATE, -1, 0);
-  if (ptr == MAP_FAILED)
-    ptr = nullptr;
 #else
   int map_flags = MAP_ANON | MAP_PRIVATE;
 #if defined(__APPLE__) && !defined(IPHONEOS)

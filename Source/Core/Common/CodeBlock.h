@@ -61,7 +61,7 @@ public:
       region = static_cast<u8*>(Common::AllocateMemoryPages(total_region_size));
     T::SetCodePtr(region, region + size);
 
-#if defined(IPHONEOS) || (defined(__APPLE__) && defined(__aarch64__) && !TARGET_OS_IPHONE)
+#ifdef IPHONEOS
     if constexpr (executable)
       writable_region_diff = Common::AllocateWritableRegionAndGetDiff(region, size);
 #endif
@@ -81,7 +81,7 @@ public:
   void FreeCodeSpace()
   {
     ASSERT(!m_is_child);
-#if defined(IPHONEOS) || (defined(__APPLE__) && defined(__aarch64__) && !TARGET_OS_IPHONE)
+#ifdef IPHONEOS
     if constexpr (executable)
     {
       Common::FreeWritableRegion(region, total_region_size, writable_region_diff);
