@@ -1213,6 +1213,18 @@ static WiimoteEmu::Wiimote* load_saved_controller_config(unsigned port, unsigned
   return nullptr;  // nothing found, applies hard-coded defaults
 }
 
+// returns retropad_expr on its own, with additional mouse bindings
+static std::string bindMouse(const std::string& retropad_expr, const std::string& mouse_target)
+{
+  static const bool enable_default_mouse_bindings =
+    Libretro::Options::GetCached<bool>(Libretro::Options::retroarch_core::ENABLE_DEFAULT_MOUSE_BINDINGS, /*def=*/true);
+
+  if (!enable_default_mouse_bindings)
+    return retropad_expr;
+
+  return retropad_expr + " | `" + mouse_target + "`";
+}
+
 void retro_set_controller_port_device_gc(unsigned port, unsigned device)
 {
   std::string devJoypad = Libretro::Input::GetQualifiedName(port, RETRO_DEVICE_JOYPAD);
@@ -1413,12 +1425,12 @@ void retro_set_controller_port_device_wii(unsigned port, unsigned device)
       ncStick->SetControlExpression(1, "`" + devAnalog + ":Y0+`");         // Down
       ncStick->SetControlExpression(2, "`" + devAnalog + ":X0-`");         // Left
       ncStick->SetControlExpression(3, "`" + devAnalog + ":X0+`");         // Right
-      ncShake->SetControlExpression(0, "L2 | `" + devMouse + ":Middle`");  // Nunchuk shake X
-      ncShake->SetControlExpression(1, "L2 | `" + devMouse + ":Middle`");  // Nunchuk shake Y
-      ncShake->SetControlExpression(2, "L2 | `" + devMouse + ":Middle`");  // Nunchuk shake Z
+      ncShake->SetControlExpression(0, bindMouse("L2", devMouse + ":Middle"));  // Nunchuk shake X
+      ncShake->SetControlExpression(1, bindMouse("L2", devMouse + ":Middle"));  // Nunchuk shake Y
+      ncShake->SetControlExpression(2, bindMouse("L2", devMouse + ":Middle"));  // Nunchuk shake Z
 
-      wmButtons->SetControlExpression(0, "A | `" + devMouse + ":Left`");   // A
-      wmButtons->SetControlExpression(1, "B | `" + devMouse + ":Right`");  // B
+      wmButtons->SetControlExpression(0, bindMouse("A", devMouse + ":Left"));   // A
+      wmButtons->SetControlExpression(1, bindMouse("B", devMouse + ":Right"));  // B
       wmButtons->SetControlExpression(2, "Start");                         // 1
       wmButtons->SetControlExpression(3, "Select");                        // 2
       wmButtons->SetControlExpression(4, "L");                             // -
@@ -1430,8 +1442,8 @@ void retro_set_controller_port_device_wii(unsigned port, unsigned device)
     {
       if (device == RETRO_DEVICE_WIIMOTE)
       {
-        wmButtons->SetControlExpression(0, "A | `" + devMouse + ":Left`");   // A
-        wmButtons->SetControlExpression(1, "B | `" + devMouse + ":Right`");  // B
+        wmButtons->SetControlExpression(0, bindMouse("A", devMouse + ":Left"));   // A
+        wmButtons->SetControlExpression(1, bindMouse("B", devMouse + ":Right"));  // B
         wmButtons->SetControlExpression(2, "X");                             // 1
         wmButtons->SetControlExpression(3, "Y");                             // 2
       }
@@ -1506,9 +1518,9 @@ void retro_set_controller_port_device_wii(unsigned port, unsigned device)
     f.sideways = true;
     Libretro::Input::UpdateWiimoteMappings(f, port, device);
 
-    wmShake->SetControlExpression(0, "R2 | `" + devMouse + ":Middle`");  // Wiimote shake X
-    wmShake->SetControlExpression(1, "R2 | `" + devMouse + ":Middle`");  // Wiimote shake Y
-    wmShake->SetControlExpression(2, "R2 | `" + devMouse + ":Middle`");  // Wiimote shake Z
+    wmShake->SetControlExpression(0, bindMouse("L2", devMouse + ":Middle"));  // Wiimote shake X
+    wmShake->SetControlExpression(1, bindMouse("L2", devMouse + ":Middle"));  // Wiimote shake Y
+    wmShake->SetControlExpression(2, bindMouse("L2", devMouse + ":Middle"));  // Wiimote shake Z
   }
 
   ControllerEmu::ControlGroup* wmOptions = wm->GetWiimoteGroup(WiimoteGroup::Options);
