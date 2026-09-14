@@ -646,36 +646,36 @@ void InitSensors()
   if (!s_sensor_init_pending)
     return;
 
-  // sensors do not apply to GC, bluetooth passthrough and neither does default controller
-  if (!Core::System::GetInstance().IsWii() || Config::Get(Config::MAIN_BLUETOOTH_PASSTHROUGH_ENABLED))
-  {
-    s_sensor_init_pending = false;
+  s_sensor_init_pending = false;
+
+  // sensors do not apply bluetooth passthrough
+  if (Config::Get(Config::MAIN_BLUETOOTH_PASSTHROUGH_ENABLED))
     return;
-  }
 
-  port_max = (Core::System::GetInstance().IsWii() &&
-    Libretro::Options::GetCached<int>(Libretro::Options::sysconf::ALT_GC_PORTS_ON_WII)) ? 8 : 4;
-
-  for (int i = 0; i < port_max; i++)
+  if (Core::System::GetInstance().IsWii())
   {
-    if (sensor_interface.set_sensor_state)
+    port_max = (Core::System::GetInstance().IsWii() &&
+      Libretro::Options::GetCached<int>(Libretro::Options::sysconf::ALT_GC_PORTS_ON_WII)) ? 8 : 4;
+
+    for (int i = 0; i < port_max; i++)
     {
-      sensor_enabled[i][SENSOR_ACCELEROMETER] = sensor_interface.set_sensor_state(i, RETRO_SENSOR_ACCELEROMETER_ENABLE, 60);
-      sensor_enabled[i][SENSOR_GYRO] = sensor_interface.set_sensor_state(i, RETRO_SENSOR_GYROSCOPE_ENABLE, 60);
-
-      if (sensor_enabled[i][SENSOR_ACCELEROMETER] || sensor_enabled[i][SENSOR_GYRO])
+      if (sensor_interface.set_sensor_state)
       {
-        auto sensor = std::make_shared<SensorDevice>(i);
-        sensor->RegisterAll();
-        g_controller_interface.AddDevice(sensor);
-      }
+        sensor_enabled[i][SENSOR_ACCELEROMETER] = sensor_interface.set_sensor_state(i, RETRO_SENSOR_ACCELEROMETER_ENABLE, 60);
+        sensor_enabled[i][SENSOR_GYRO] = sensor_interface.set_sensor_state(i, RETRO_SENSOR_GYROSCOPE_ENABLE, 60);
 
-      INFO_LOG_FMT(BOOT, "Sensor interface: Port: {} ACCELEROMETER: {} GYROSCOPE: {}", i,
-        sensor_enabled[i][SENSOR_ACCELEROMETER], sensor_enabled[i][SENSOR_GYRO]);
+        if (sensor_enabled[i][SENSOR_ACCELEROMETER] || sensor_enabled[i][SENSOR_GYRO])
+        {
+          auto sensor = std::make_shared<SensorDevice>(i);
+          sensor->RegisterAll();
+          g_controller_interface.AddDevice(sensor);
+        }
+
+        INFO_LOG_FMT(BOOT, "Sensor interface: Port: {} ACCELEROMETER: {} GYROSCOPE: {}", i,
+          sensor_enabled[i][SENSOR_ACCELEROMETER], sensor_enabled[i][SENSOR_GYRO]);
+      }
     }
   }
-
-  s_sensor_init_pending = false;
 
   ResetControllers(WiimoteUpdateFlags{});
 }
