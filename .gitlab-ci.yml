@@ -58,7 +58,7 @@ libretro-build-windows-x64:
   extends:
     - .libretro-windows-cmake-x86_64
     - .core-defs
-  image: $CI_SERVER_HOST:5050/libretro-infrastructure/libretro-build-mxe-win-cross-cores:gcc14
+  image: $CI_SERVER_HOST:5050/libretro-infrastructure/libretro-build-mxe-win-cross-cores:gcc16
   variables:
     EXTRA_PATH: Binaries
   before_script:
@@ -107,9 +107,6 @@ android-arm64-v8a:
   extends:
     - .libretro-android-cmake-arm64-v8a
     - .core-defs
-  variables:
-    ANDROID_NDK_VERSION: 29.0.14206865
-    NDK_ROOT: /android-sdk-linux/ndk/$ANDROID_NDK_VERSION
 
 # Android ARMv7a (for play only)
 #android-armeabi-v7a:
@@ -117,10 +114,8 @@ android-arm64-v8a:
 #    - .libretro-android-cmake-armeabi-v7a
 #    - .core-defs
 #  variables:
-#    ANDROID_NDK_VERSION: 29.0.14206865
 #    API_LEVEL: 24
 #    CORE_ARGS: -DLIBRETRO=ON -DENABLE_LTO=ON -DENABLE_GENERIC=ON
-#    NDK_ROOT: /android-sdk-linux/ndk/$ANDROID_NDK_VERSION
 
 # Android x86_64 (for play only)
 android-x86_64:
@@ -128,10 +123,8 @@ android-x86_64:
     - .libretro-android-cmake-x86_64
     - .core-defs
   variables:
-    ANDROID_NDK_VERSION: 29.0.14206865
     API_LEVEL: 24
     CORE_ARGS: -DLIBRETRO=ON -DENABLE_LTO=ON
-    NDK_ROOT: /android-sdk-linux/ndk/$ANDROID_NDK_VERSION
 
 # iOS arm64
 libretro-build-ios-arm64:
