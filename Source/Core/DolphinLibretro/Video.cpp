@@ -470,7 +470,12 @@ bool Video_InitializeBackend()
 {
   WindowSystemInfo wsi = {};
   wsi.type = WindowSystemType::Libretro;
-  wsi.render_surface_scale = 1.0f;
+  // If we don't do this, the ImGui overlay will be
+  // really small at high internal resolutions
+  // (at least in Vulkan and OpenGL).
+  int efbScale = Libretro::Options::GetCached<int>(
+    Libretro::Options::gfx_settings::EFB_SCALE, 1);
+  wsi.render_surface_scale = efbScale;
 
   g_video_backend->PrepareWindow(wsi);
 
