@@ -12,6 +12,7 @@
 #include <fmt/format.h>
 
 #include "Common/BitUtils.h"
+#include "Common/CommonPaths.h"
 #include "Common/CommonTypes.h"
 #include "Common/FileUtil.h"
 #include "Common/IOFile.h"
@@ -494,20 +495,18 @@ void Init()
   if (!s_backup.IsOpen())
     PanicAlertFmt("Failed to open/create: {}", base_path + "backup.bin");
 
-  // This is the firmware for the Triforce
-  const std::string sega_boot_filename = base_path + "segaboot.gcm";
+  // SegaBoot is firmware, but older installations keep it alongside other Triforce data
+  const std::string system_sega_boot_filename =
+      File::GetSysDirectory() + TRI_SYS_DIR DIR_SEP "segaboot.gcm";
+  const std::string legacy_sega_boot_filename = base_path + "segaboot.gcm";
+  File::IOFile sega_boot(system_sega_boot_filename, "rb");
+  if (!sega_boot.IsOpen())
+    sega_boot.Open(legacy_sega_boot_filename, "rb");
 
-  if (!File::Exists(sega_boot_filename))
-  {
-    PanicAlertFmt("Failed to open segaboot.gcm({}), which is required for test menus.",
-                  sega_boot_filename.c_str());
-    return;
-  }
-
-  File::IOFile sega_boot(sega_boot_filename, "rb+");
   if (!sega_boot.IsOpen())
   {
-    PanicAlertFmt("Failed to read: {}", sega_boot_filename);
+    PanicAlertFmt("Failed to read segaboot.gcm, which is required for test menus. Tried {} and {}",
+                  system_sega_boot_filename, legacy_sega_boot_filename);
     return;
   }
 
