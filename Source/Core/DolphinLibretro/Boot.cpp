@@ -55,6 +55,13 @@ static unsigned disk_index = 0;
 static bool eject_state;
 static std::vector<std::string> disk_paths;
 
+static void ResetDiskControlState()
+{
+  disk_index = 0;
+  eject_state = false;
+  disk_paths.clear();
+}
+
 // GBPlayer
 static std::string GBPlayer_rom_path;
 static bool GBPlayer_active;
@@ -173,6 +180,8 @@ void generate_cht_from_ini(std::string fileName)
 
 bool retro_load_game(const struct retro_game_info* game)
 {
+  Libretro::ResetDiskControlState();
+
   const char* save_dir = NULL;
   const char* gba_save_dir = NULL;
   const char* system_dir = NULL;
@@ -819,6 +828,7 @@ void retro_unload_game(void)
 
   Core::UndeclareAsCPUThread();
   Core::UndeclareAsGPUThread();
+  Libretro::ResetDiskControlState();
 }
 
 namespace Libretro
