@@ -854,7 +854,9 @@ void ShaderCache::LoadPipelineUIDCache()
       m_gx_pipeline_uid_cache_file.WriteBytes(&GX_PIPELINE_UID_VERSION,
                                               sizeof(GX_PIPELINE_UID_VERSION));
 
-      // Include any UIDs read before the old cache was found to be incomplete.
+      // Write any current UIDs out to the file.
+      // This way, if we load a UID cache where the data was incomplete (e.g. Dolphin crashed),
+      // we don't lose the existing UIDs which were previously at the beginning.
       for (const auto& it : m_gx_pipeline_cache)
         AppendGXPipelineUID(it.first);
     }
@@ -865,6 +867,7 @@ void ShaderCache::LoadPipelineUIDCache()
 
 void ShaderCache::ClosePipelineUIDCache()
 {
+  // This is left as a method in case we need to append extra data to the file in the future.
 #ifdef __LIBRETRO__
   if (m_gx_pipeline_uid_cache_file.IsOpen() && !m_pending_gx_pipeline_uids.empty() &&
       !m_gx_pipeline_uid_cache_file.WriteArray(m_pending_gx_pipeline_uids.data(),
