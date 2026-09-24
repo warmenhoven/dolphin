@@ -61,7 +61,7 @@ set(AppleClang_min_version 14.0.3)
 set(MSVC_min_version 19.32)
 # Standard libraries
 set(libstdc++_min_version 12) # This should match GCC_min_version's major version.
-set(libc++_min_version 150000) # This should match Clang_min_version in the format "xxyyzz" instead of "xx.yy.zz" 
+set(libc++_min_version 150000) # This should match Clang_min_version in the format "xxyyzz" instead of "xx.yy.zz"
 
 dolphin_check_toolset_version("Xcode" XCODE_VERSION ${Xcode_min_version})
 dolphin_check_toolset_version("MSVC Toolset" MSVC_TOOLSET_VERSION ${MSVC_toolset_min_version})
@@ -104,7 +104,7 @@ if(APPROVED_VENDORED_DEPENDENCIES)
   message(WARNING "APPROVED_VENDORED_DEPENDENCIES is deprecated.  Please migrate to setting USE_SYSTEM_LIBS to ON and setting USE_SYSTEM_<dependency> to either AUTO or OFF to allow bundled libs.")
 endif()
 option(USE_UPNP "Enables UPnP port mapping support" ON)
-option(ENABLE_NOGUI "Enable NoGUI frontend" ON)
+option(ENABLE_NOGUI "Enable NoGUI frontend" OFF)
 option(ENABLE_QT "Enable Qt (Default)" ON)
 option(ENABLE_LTO "Enables Link Time Optimization" OFF)
 option(ENABLE_GENERIC "Enables generic build that should run on any little-endian host" OFF)
@@ -242,6 +242,12 @@ else()
       " Enable generic build if you really want a JIT-less binary.")
 endif()
 
+if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
+  set(DOLPHIN_HOST ARM64)
+elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "x64|x86_64|amd64|AMD64")
+  set(DOLPHIN_HOST x64)
+endif()
+
 if(CMAKE_GENERATOR MATCHES "Ninja")
   check_and_add_flag(DIAGNOSTICS_COLOR -fdiagnostics-color)
 elseif(CMAKE_GENERATOR MATCHES "Visual Studio")
@@ -280,6 +286,7 @@ if(MSVC)
 
   # Additional warnings
   add_compile_options(
+    /w15262 # Unannotated fallthrough between switch labels
     /w44263 # Non-virtual member function hides base class virtual function
     /w44265 # Class has virtual functions, but destructor is not virtual
     /w44946 # Reinterpret cast between related types
