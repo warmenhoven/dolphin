@@ -118,6 +118,9 @@ cb(RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO, (void*)subsystems);
 
 void retro_init(void)
 {
+  uint64_t serialization_quirks = RETRO_SERIALIZATION_QUIRK_MUST_INITIALIZE;
+  Libretro::environ_cb(RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS, &serialization_quirks);
+
   enum retro_pixel_format xrgb888 = RETRO_PIXEL_FORMAT_XRGB8888;
   Libretro::environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &xrgb888);
 
@@ -512,6 +515,9 @@ size_t retro_serialize_size(void)
   size_t size = 0;
 
   Core::System& system = Core::System::GetInstance();
+  if (!Core::IsRunning(system))
+    return 0;
+
   AsyncRequests* ar = AsyncRequests::GetInstance();
 
   if (system.IsDualCoreMode())
@@ -531,6 +537,9 @@ size_t retro_serialize_size(void)
 bool retro_serialize(void* data, size_t size)
 {
   Core::System& system = Core::System::GetInstance();
+  if (!Core::IsRunning(system))
+    return false;
+
   AsyncRequests* ar = AsyncRequests::GetInstance();
 
   if (system.IsDualCoreMode())
@@ -557,6 +566,9 @@ bool retro_serialize(void* data, size_t size)
 bool retro_unserialize(const void* data, size_t size)
 {
   Core::System& system = Core::System::GetInstance();
+  if (!Core::IsRunning(system))
+    return false;
+
   AsyncRequests* ar = AsyncRequests::GetInstance();
 
   if (system.IsDualCoreMode())
