@@ -42,12 +42,19 @@ extern double g_accel_pos[NUM_CONTROLLERS_FOR_SENSORS][3];
 extern double g_accel_neg[NUM_CONTROLLERS_FOR_SENSORS][3];
 extern double g_gyro_pos[NUM_CONTROLLERS_FOR_SENSORS][3];
 extern double g_gyro_neg[NUM_CONTROLLERS_FOR_SENSORS][3];
+// Where the VR controller points, as one-sided -1..1 pairs: right, left, down, up.
+extern double g_point[NUM_CONTROLLERS_FOR_SENSORS][4];
 
 static retro_sensor_interface sensor_interface = {0};
 
 void Init(const WindowSystemInfo& wsi);
 void InitStage2();
 void InitSensors();
+// VR: player 1's Wiimote takes its motion and pointing from the right VR controller.
+bool UsesVRMotion(unsigned port);
+// Accelerometer in m/s^2 and gyroscope in rad/s about the remote's axes (+X left, +Y back,
+// +Z up), and where it points (-1..1, +X right, +Y up).
+void SetVRMotion(unsigned port, const float accel[3], const float gyro[3], const float point[2]);
 void UpdateAccelerometer(unsigned port);
 void UpdateGyro(unsigned port);
 void Update();
@@ -99,6 +106,10 @@ public:
     AddInput(new ScalarInput("AccelY-", &Libretro::Input::g_accel_neg[m_port][1]));
     AddInput(new ScalarInput("AccelZ+", &Libretro::Input::g_accel_pos[m_port][2]));
     AddInput(new ScalarInput("AccelZ-", &Libretro::Input::g_accel_neg[m_port][2]));
+    AddInput(new ScalarInput("PointRight", &Libretro::Input::g_point[m_port][0]));
+    AddInput(new ScalarInput("PointLeft", &Libretro::Input::g_point[m_port][1]));
+    AddInput(new ScalarInput("PointDown", &Libretro::Input::g_point[m_port][2]));
+    AddInput(new ScalarInput("PointUp", &Libretro::Input::g_point[m_port][3]));
   }
 
 private:

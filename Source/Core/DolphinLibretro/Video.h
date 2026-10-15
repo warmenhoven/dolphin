@@ -36,6 +36,7 @@ namespace Libretro
 {
 namespace Video
 {
+int GetAdjustedBaseWidth();
 int GetAdjustedBaseHeight();
 void Init(void);
 bool Video_InitializeBackend();

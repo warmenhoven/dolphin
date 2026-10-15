@@ -25,6 +25,44 @@
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/XFMemory.h"
 #include "VideoCommon/XFStateManager.h"
+#ifdef __LIBRETRO__
+#include "Core/System.h"
+#include "VideoCommon/GeometryShaderManager.h"
+
+LibretroVRCamera g_libretro_vr_camera;
+
+// The headset only replaces what is drawn to the screen. Render-to-texture passes such as shadows
+// and reflections draw into smaller viewports and keep the game's projection.
+static bool IsLibretroVRScreenViewport()
+{
+  return g_libretro_vr_camera.enabled &&
+         std::abs(2.0f * xfmem.viewport.wd) >= EFB_WIDTH * 0.75f &&
+         std::abs(2.0f * xfmem.viewport.ht) >= EFB_HEIGHT * 0.5f;
+}
+
+static bool UseLibretroVRCamera()
+{
+  return IsLibretroVRScreenViewport() && xfmem.projection.type == ProjectionType::Perspective;
+}
+
+// Textured 2D such as menus and HUD. Untextured 2D (fades) and 2D drawn from a copy of the frame
+// (bloom, blur) cover the scene, which fills the headset's view, so they stay full size.
+static bool UseLibretroVRScreen()
+{
+  return IsLibretroVRScreenViewport() &&
+         xfmem.projection.type == ProjectionType::Orthographic &&
+         g_libretro_vr_camera.draw_textured && !g_libretro_vr_camera.draw_samples_copy;
+}
+
+static bool LibretroVRCameraChanged()
+{
+  const bool camera = UseLibretroVRCamera();
+  const bool screen = UseLibretroVRScreen();
+  return camera != g_libretro_vr_camera.applied ||
+         screen != g_libretro_vr_camera.screen_applied ||
+         ((camera || screen) && g_libretro_vr_camera.dirty);
+}
+#endif
 
 void VertexShaderManager::Init()
 {
@@ -109,7 +147,51 @@ Common::Matrix44 VertexShaderManager::LoadProjectionMatrix()
   PRIM_LOG("Projection: {} {} {} {} {} {}", rawProjection[0], rawProjection[1], rawProjection[2],
            rawProjection[3], rawProjection[4], rawProjection[5]);
 
+#ifdef __LIBRETRO__
+  const bool use_vr_camera = UseLibretroVRCamera();
+  const bool use_vr_screen = UseLibretroVRScreen();
+  LibretroVRCamera& vr = g_libretro_vr_camera;
+  if (use_vr_camera)
+  {
+    // Remember how wide the game's camera sees, for the 2D screen.
+    vr.game_tan_x = 1.0f / std::abs(m_projection_matrix[0]);
+    vr.game_tan_y = 1.0f / std::abs(m_projection_matrix[5]);
+
+    // Draw with the headset's field of view, keeping the sign of a mirrored projection.
+    const float sign_x = rawProjection[0] < 0.0f ? -1.0f : 1.0f;
+    const float sign_y = rawProjection[2] < 0.0f ? -1.0f : 1.0f;
+    m_projection_matrix[0] = vr.scale_x * sign_x;
+    m_projection_matrix[2] = vr.offset_x * sign_x;
+    m_projection_matrix[5] = vr.scale_y * sign_y;
+    m_projection_matrix[6] = vr.offset_y * sign_y;
+    vr.dirty = false;
+  }
+  else if (use_vr_screen)
+  {
+    // Full-screen 2D
+    const float tan_x = vr.game_tan_x > 0.0f ? vr.game_tan_x : 0.58f;
+    const float tan_y = vr.game_tan_y > 0.0f ? vr.game_tan_y : 0.58f / vr.display_aspect;
+    const float scale_x = tan_x * vr.scale_x;
+    const float scale_y = tan_y * vr.scale_y;
+    m_projection_matrix[0] *= scale_x;
+    m_projection_matrix[3] = m_projection_matrix[3] * scale_x - vr.offset_x;
+    m_projection_matrix[5] *= scale_y;
+    m_projection_matrix[7] = m_projection_matrix[7] * scale_y - vr.offset_y;
+    vr.dirty = false;
+  }
+  // The per-eye stereo offsets depend on whether this projection uses the headset.
+  if (use_vr_camera || use_vr_screen || vr.applied || vr.screen_applied)
+    Core::System::GetInstance().GetGeometryShaderManager().SetProjectionChanged();
+  vr.applied = use_vr_camera;
+  vr.screen_applied = use_vr_screen;
+#endif
+
   auto corrected_matrix = Common::Matrix44::FromArray(m_projection_matrix);
+
+#ifdef __LIBRETRO__
+  if (use_vr_camera)
+    corrected_matrix *= g_libretro_vr_camera.view;
+#endif
 
   if (g_freelook_camera.IsActive() && xfmem.projection.type == ProjectionType::Perspective)
     corrected_matrix *= g_freelook_camera.GetView();
@@ -121,7 +203,11 @@ Common::Matrix44 VertexShaderManager::LoadProjectionMatrix()
 
 void VertexShaderManager::SetProjectionMatrix(XFStateManager& xf_state_manager)
 {
-  if (xf_state_manager.DidProjectionChange() || g_freelook_camera.GetController()->IsDirty())
+  if (xf_state_manager.DidProjectionChange() || g_freelook_camera.GetController()->IsDirty()
+#ifdef __LIBRETRO__
+      || LibretroVRCameraChanged()
+#endif
+  )
   {
     xf_state_manager.ResetProjection();
     auto corrected_matrix = LoadProjectionMatrix();
@@ -412,7 +498,11 @@ void VertexShaderManager::SetConstants(std::span<const std::string> textures,
   }
 
   if (xf_state_manager.DidProjectionChange() || g_freelook_camera.GetController()->IsDirty() ||
-      !projection_actions.empty() || m_projection_graphics_mod_change)
+      !projection_actions.empty() || m_projection_graphics_mod_change
+#ifdef __LIBRETRO__
+      || LibretroVRCameraChanged()
+#endif
+  )
   {
     xf_state_manager.ResetProjection();
     m_projection_graphics_mod_change = !projection_actions.empty();

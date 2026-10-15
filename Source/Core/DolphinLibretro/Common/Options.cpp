@@ -1070,6 +1070,21 @@ static struct retro_core_option_v2_definition option_defs[] = {
     },
     "disabled"
   },
+  {
+    Libretro::Options::gfx_settings::VR_MODE,
+    "Graphics > Settings > VR Mode",
+    "VR Mode",
+    "'Stereoscopic' shows the game on a virtual screen in 3D. 'Immersive' also turns the game camera with your head. Expect odd things in immersive mode. Requires a frontend with VR support.",
+    nullptr,
+    CATEGORY_GFX_SETTINGS,
+    {
+      { "disabled",  nullptr },
+      { "stereo",    "Stereoscopic" },
+      { "immersive", "Immersive (Free Look)" },
+      { nullptr, nullptr }
+    },
+    "disabled"
+  },
 
   // ========== Graphics.Enhancements ==========
   {

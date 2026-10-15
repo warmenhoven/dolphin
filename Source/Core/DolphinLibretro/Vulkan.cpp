@@ -418,7 +418,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL vkQueuePresentKHR(VkQueue queue,
   {
     if (AbstractTexture* efb_tex = g_framebuffer_manager->GetEFBColorTexture())
     {
-      out_w = efb_tex->GetWidth();
+      // VR packs both eyes side by side, so the frame is wider than the EFB by the same
+      // factor as the swapchain.
+      out_w = efb_tex->GetWidth() * Libretro::Video::GetAdjustedBaseWidth() / EFB_WIDTH;
       out_h = efb_tex->GetHeight();
     }
   }

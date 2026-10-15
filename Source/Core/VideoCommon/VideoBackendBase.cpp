@@ -268,6 +268,10 @@ void VideoBackendBase::PopulateBackendInfo(const WindowSystemInfo& wsi)
   ActivateBackend(Config::Get(Config::MAIN_GFX_BACKEND));
   g_backend_info.DisplayName = g_video_backend->GetDisplayName();
   g_video_backend->InitBackendInfo(wsi);
+#ifdef __LIBRETRO__
+  if (g_backend_info.api_type == APIType::Nothing)
+    return;
+#endif
   // We validate the config after initializing the backend info, as system-specific settings
   // such as anti-aliasing, or the selected adapter may be invalid, and should be checked.
   g_Config.VerifyValidity();

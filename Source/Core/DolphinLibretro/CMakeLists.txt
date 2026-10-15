@@ -7,6 +7,7 @@ add_library(dolphin_libretro SHARED
   Log.cpp
   Main.cpp
   Video.cpp
+  VR.cpp
 )
 
 if(ENABLE_VULKAN)

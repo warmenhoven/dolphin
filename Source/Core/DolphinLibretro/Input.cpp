@@ -34,6 +34,7 @@
 #include "DolphinLibretro/Input.h"
 #include "DolphinLibretro/Common/Globals.h"
 #include "DolphinLibretro/Common/Options.h"
+#include "DolphinLibretro/VR.h"
 #ifdef CIFACE_USE_DUALSHOCKUDPCLIENT
 #include "InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPClient.h"
 #endif
@@ -115,6 +116,9 @@ double g_accel_pos[NUM_CONTROLLERS_FOR_SENSORS][3] = {}; // x, y, z
 double g_accel_neg[NUM_CONTROLLERS_FOR_SENSORS][3] = {}; // x, y, z
 double g_gyro_pos[NUM_CONTROLLERS_FOR_SENSORS][3] = {};  // x, y, z
 double g_gyro_neg[NUM_CONTROLLERS_FOR_SENSORS][3] = {};  // x, y, z
+double g_point[NUM_CONTROLLERS_FOR_SENSORS][4] = {};     // right, left, down, up
+// Player 1's Wiimote is driven by the right VR controller (VR Mode on at boot).
+static bool s_vr_motion = false;
 
 static struct retro_input_descriptor descGC[] = {
     {0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT, "Left"},
@@ -660,22 +664,33 @@ void InitSensors()
     port_max = (Core::System::GetInstance().IsWii() &&
       Libretro::Options::GetCached<int>(Libretro::Options::sysconf::ALT_GC_PORTS_ON_WII)) ? 8 : 4;
 
+    // In VR the right controller moves player 1's Wiimote.
+    s_vr_motion = Libretro::VR::IsEnabled();
+
     for (int i = 0; i < port_max; i++)
     {
-      if (sensor_interface.set_sensor_state)
+      if (s_vr_motion && i == 0)
+      {
+        sensor_enabled[i][SENSOR_ACCELEROMETER] = true;
+        sensor_enabled[i][SENSOR_GYRO] = true;
+        // At rest until the controller is seen: gravity reads as up.
+        g_accel_pos[i][2] = 9.80665;
+        INFO_LOG_FMT(BOOT, "Sensor interface: Port: {} driven by the right VR controller", i);
+      }
+      else if (sensor_interface.set_sensor_state)
       {
         sensor_enabled[i][SENSOR_ACCELEROMETER] = sensor_interface.set_sensor_state(i, RETRO_SENSOR_ACCELEROMETER_ENABLE, 60);
         sensor_enabled[i][SENSOR_GYRO] = sensor_interface.set_sensor_state(i, RETRO_SENSOR_GYROSCOPE_ENABLE, 60);
 
-        if (sensor_enabled[i][SENSOR_ACCELEROMETER] || sensor_enabled[i][SENSOR_GYRO])
-        {
-          auto sensor = std::make_shared<SensorDevice>(i);
-          sensor->RegisterAll();
-          g_controller_interface.AddDevice(sensor);
-        }
-
         INFO_LOG_FMT(BOOT, "Sensor interface: Port: {} ACCELEROMETER: {} GYROSCOPE: {}", i,
           sensor_enabled[i][SENSOR_ACCELEROMETER], sensor_enabled[i][SENSOR_GYRO]);
+      }
+
+      if (sensor_enabled[i][SENSOR_ACCELEROMETER] || sensor_enabled[i][SENSOR_GYRO])
+      {
+        auto sensor = std::make_shared<SensorDevice>(i);
+        sensor->RegisterAll();
+        g_controller_interface.AddDevice(sensor);
       }
     }
   }
@@ -702,15 +717,20 @@ void Shutdown()
     Pad::ResetRumble(i);
 
     // Was crossed over and hardcoded to port 0, leaving sensors running.
-    if (sensor_enabled[i][SENSOR_ACCELEROMETER])
-      sensor_interface.set_sensor_state(i, RETRO_SENSOR_ACCELEROMETER_DISABLE, 0);
+    // A port driven by a VR controller never turned the frontend's sensors on.
+    if (!UsesVRMotion(i))
+    {
+      if (sensor_enabled[i][SENSOR_ACCELEROMETER])
+        sensor_interface.set_sensor_state(i, RETRO_SENSOR_ACCELEROMETER_DISABLE, 0);
 
-    if (sensor_enabled[i][SENSOR_GYRO])
-      sensor_interface.set_sensor_state(i, RETRO_SENSOR_GYROSCOPE_DISABLE, 0);
+      if (sensor_enabled[i][SENSOR_GYRO])
+        sensor_interface.set_sensor_state(i, RETRO_SENSOR_GYROSCOPE_DISABLE, 0);
+    }
 
     sensor_enabled[i][SENSOR_ACCELEROMETER] = false;
     sensor_enabled[i][SENSOR_GYRO] = false;
   }
+  s_vr_motion = false;
 
   Keyboard::Shutdown();
   Pad::Shutdown();
@@ -719,9 +739,30 @@ void Shutdown()
   rumble.set_rumble_state = nullptr;
 }
 
+bool UsesVRMotion(unsigned port)
+{
+  return s_vr_motion && port == 0;
+}
+
+void SetVRMotion(unsigned port, const float accel[3], const float gyro[3], const float point[2])
+{
+  for (int i = 0; i < 3; i++)
+  {
+    g_accel_pos[port][i] = std::max(0.0f, accel[i]);
+    g_accel_neg[port][i] = std::max(0.0f, -accel[i]);
+    g_gyro_pos[port][i] = std::max(0.0f, gyro[i]);
+    g_gyro_neg[port][i] = std::max(0.0f, -gyro[i]);
+  }
+  g_point[port][0] = std::max(0.0f, point[0]);
+  g_point[port][1] = std::max(0.0f, -point[0]);
+  g_point[port][2] = std::max(0.0f, -point[1]);
+  g_point[port][3] = std::max(0.0f, point[1]);
+}
+
 void UpdateAccelerometer(unsigned port)
 {
-  if (!sensor_enabled[port][SENSOR_ACCELEROMETER] || !sensor_interface.get_sensor_input)
+  if (!sensor_enabled[port][SENSOR_ACCELEROMETER] || !sensor_interface.get_sensor_input ||
+      UsesVRMotion(port))
     return;
 
   static const float G = 9.80665f;
@@ -753,7 +794,8 @@ void UpdateAccelerometer(unsigned port)
 
 void UpdateGyro(unsigned port)
 {
-  if (!sensor_enabled[port][SENSOR_GYRO] || !sensor_interface.get_sensor_input)
+  if (!sensor_enabled[port][SENSOR_GYRO] || !sensor_interface.get_sensor_input ||
+      UsesVRMotion(port))
     return;
 
   // rad/s about the remote's own axes: +X left, +Y back, +Z up.
@@ -951,19 +993,26 @@ void UpdateWiimoteMappings(const WiimoteUpdateFlags& f, unsigned port, unsigned 
       std::string devAnalog = Libretro::Input::GetQualifiedName(port, RETRO_DEVICE_ANALOG);
       std::string devPointer = Libretro::Input::GetQualifiedName(port, RETRO_DEVICE_POINTER);
 
+      // In VR the right controller aims the cursor too, alongside the thumbstick or mouse.
+      const bool vr_aim = Libretro::Input::UsesVRMotion(port) && irMode != 0;
+      const std::string devSensor = GetQualifiedNameSensor(port);
+      auto aim = [&](const std::string& expr, const char* direction) {
+        return vr_aim ? "(" + expr + ") | `" + devSensor + ":" + direction + "`" : expr;
+      };
+
       if (irMode == 0 || irMode == 1)
       {
         // Set right stick to control the IR
         std::string irMod = Libretro::Options::GetCached<std::string>(Libretro::Options::wiimote::IR_MODIFIER);
-        wmIR->SetControlExpression(0, wrap(irMod, "`" + devAnalog + ":Y1-`")); // Up
-        wmIR->SetControlExpression(1, wrap(irMod, "`" + devAnalog + ":Y1+`")); // Down
-        wmIR->SetControlExpression(2, wrap(irMod, "`" + devAnalog + ":X1-`")); // Left
-        wmIR->SetControlExpression(3, wrap(irMod, "`" + devAnalog + ":X1+`")); // Right
+        wmIR->SetControlExpression(0, aim(wrap(irMod, "`" + devAnalog + ":Y1-`"), "PointUp")); // Up
+        wmIR->SetControlExpression(1, aim(wrap(irMod, "`" + devAnalog + ":Y1+`"), "PointDown")); // Down
+        wmIR->SetControlExpression(2, aim(wrap(irMod, "`" + devAnalog + ":X1-`"), "PointLeft")); // Left
+        wmIR->SetControlExpression(3, aim(wrap(irMod, "`" + devAnalog + ":X1+`"), "PointRight")); // Right
 
         static_cast<ControllerEmu::NumericSetting<bool>*>(wmIR->numeric_settings[4].get())
           ->SetValue(irMode == 0);                                    // Relative input
         static_cast<ControllerEmu::NumericSetting<bool>*>(wmIR->numeric_settings[5].get())
-          ->SetValue(true);                                           // Auto hide
+          ->SetValue(!vr_aim);                                        // Auto hide
 
         // Swing‑related updates
         ControllerEmu::ControlGroup* wmSwing = wm->GetWiimoteGroup(WiimoteEmu::WiimoteGroup::Swing);
@@ -993,10 +1042,10 @@ void UpdateWiimoteMappings(const WiimoteUpdateFlags& f, unsigned port, unsigned 
       else
       {
         // Mouse controls IR
-        wmIR->SetControlExpression(0, "`" + devPointer + ":Y0-`");    // Up
-        wmIR->SetControlExpression(1, "`" + devPointer + ":Y0+`");    // Down
-        wmIR->SetControlExpression(2, "`" + devPointer + ":X0-`");    // Left
-        wmIR->SetControlExpression(3, "`" + devPointer + ":X0+`");    // Right
+        wmIR->SetControlExpression(0, aim("`" + devPointer + ":Y0-`", "PointUp"));    // Up
+        wmIR->SetControlExpression(1, aim("`" + devPointer + ":Y0+`", "PointDown"));  // Down
+        wmIR->SetControlExpression(2, aim("`" + devPointer + ":X0-`", "PointLeft"));  // Left
+        wmIR->SetControlExpression(3, aim("`" + devPointer + ":X0+`", "PointRight")); // Right
         static_cast<ControllerEmu::NumericSetting<bool>*>(wmIR->numeric_settings[4].get())
           ->SetValue(false);                                          // Relative input
         static_cast<ControllerEmu::NumericSetting<bool>*>(wmIR->numeric_settings[5].get())
