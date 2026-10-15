@@ -24,7 +24,8 @@ enum CallBackMode
 {
   // Dolphin will Push samples into the soundstream
   PUSH_SAMPLES = 0,
-  // Samples are pushed per frame in retro_run, but use frame time callback to set pace
+  // One emulated frame's samples are pushed in each retro_run, so the frontend's audio sync and
+  // rate control pace the core
   SYNC_PER_FRAME = 1,
   // RetroArch requests audio samples based on its callbacks (target refresh rate/buffer status)
   ASYNC_CALLBACK = 2,
@@ -77,7 +78,7 @@ unsigned int GetActiveSampleRate()
 void Reset()
 {
   g_use_call_back_audio = Libretro::Options::GetCached<int>(Libretro::Options::audio::CALL_BACK_AUDIO,
-    CallBackMode::PUSH_SAMPLES);
+    CallBackMode::SYNC_PER_FRAME);
   g_audio_state_cb = false;
 }
 
@@ -87,6 +88,11 @@ void Init()
 
   // don't use any callback, let dolphin push audio samples
   if (g_use_call_back_audio == CallBackMode::PUSH_SAMPLES)
+    return;
+
+  // a frontend audio callback would make the frontend treat the core's
+  // audio as callback driven, outside its audio sync and rate control
+  if (g_use_call_back_audio == CallBackMode::SYNC_PER_FRAME)
     return;
 
   retro_audio_callback racb = {};
@@ -217,34 +223,29 @@ void Stream::MixAndPush(unsigned int num_samples)
   }
 }
 
+// Per frame sync: each field's samples go to the frontend from the CPU thread as the field ends,
+void Stream::NewField()
+{
+  PushAudioForFrame();
+}
+
 void Stream::PushAudioForFrame()
 {
   if (g_use_call_back_audio != CallBackMode::SYNC_PER_FRAME || !m_mixer || !batch_cb)
     return;
 
-  // Calculate samples needed for this frame at output rate
-  unsigned samples_for_frame;
-  
-  if (FrameTiming::IsEnabled())
-  {
-    samples_for_frame = GetSamplesForFrame(m_sample_rate);
-  }
-  else
-  {
-    if (Libretro::g_core_refresh_rate <= 0.0)
-    {
-      if (retro_get_region() == RETRO_REGION_NTSC)
-        samples_for_frame = m_sample_rate / 60;
-      else
-        samples_for_frame = m_sample_rate / 50;
-    }
-    else
-    {
-      samples_for_frame =
-        static_cast<unsigned>(std::lround(m_sample_rate / Libretro::g_core_refresh_rate));
-    }
-  }
-  
+  // The DSP fills the mixer at the game's refresh rate, not the
+  // display's, so that rate is used and the fraction carried over: the mixer then neither fills up
+  // nor runs dry, and the frontend's rate control covers the display's difference.
+  double frame_rate = Libretro::g_core_refresh_rate;
+  if (frame_rate <= 0.0)
+    frame_rate = (retro_get_region() == RETRO_REGION_NTSC) ? 60.0 / 1.001 : 50.0;
+
+  static double carry = 0.0;
+  const double exact = m_sample_rate / frame_rate + carry;
+  unsigned samples_for_frame = static_cast<unsigned>(exact);
+  carry = exact - samples_for_frame;
+
   samples_for_frame = std::clamp(samples_for_frame, MIN_SAMPLES, MAX_SAMPLES);
 
   MixAndPush(samples_for_frame);
@@ -276,9 +277,10 @@ void Stream::ProcessCallBack()
 
   if (Libretro::Audio::g_buf_support.load(std::memory_order_relaxed))
   {
+    constexpr unsigned FULL_PERCENT = 75;
     unsigned occ = Libretro::Audio::g_buf_occupancy.load(std::memory_order_relaxed);
 
-    if (occ >= MAX_SAMPLES)
+    if (occ >= FULL_PERCENT)
       return;
 
     // Use frame time to decide how much to push
