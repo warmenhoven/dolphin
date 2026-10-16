@@ -25,5 +25,7 @@ public:
 #ifdef __LIBRETRO__
   virtual void Update(unsigned int num_samples) {}
   virtual void ProcessCallBack() {}
+  // On the CPU thread at each emulated field boundary
+  virtual void NewField() {}
 #endif
 };

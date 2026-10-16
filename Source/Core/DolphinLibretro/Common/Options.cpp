@@ -603,7 +603,7 @@ static struct retro_core_option_v2_definition option_defs[] = {
       { "2",  "Async - driven by callbacks using refresh rate and audio buffer status" },
       { nullptr, nullptr }
     },
-    "0"
+    "1"
   },
 
   // ========== SYSCONF (GC) ==========

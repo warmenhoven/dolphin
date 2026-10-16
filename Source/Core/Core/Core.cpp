@@ -1004,6 +1004,10 @@ void Callback_NewField(Core::System& system)
 #ifdef __LIBRETRO__
   if (system.IsDualCoreMode())
     system.GetFifo().StopGpuLoop();
+  // frontend waiting on audio here holds the thread while
+  // the frame is presented.
+  if (SoundStream* sound_stream = system.GetSoundStream())
+    sound_stream->NewField();
 #endif
 }
 

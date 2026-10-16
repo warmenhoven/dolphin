@@ -39,6 +39,7 @@ public:
   void Update(unsigned int num_samples) override;
 
   void ProcessCallBack() override;
+  void NewField() override;
 
 private:
   s16 m_buffer[MAX_SAMPLES * 2];

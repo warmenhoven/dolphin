@@ -500,15 +500,6 @@ void retro_run(void)
 
   RETRO_PERFORMANCE_STOP(dolphin_main_func);
 
-  if (auto* sound_stream = system.GetSoundStream())
-  {
-    auto* libretro_stream = static_cast<Libretro::Audio::Stream*>(sound_stream);
-    if (libretro_stream)
-    {
-      libretro_stream->PushAudioForFrame();
-    }
-  }
-
   if (Libretro::Input::g_has_microphone_support)
     poll_microphone();
 }
