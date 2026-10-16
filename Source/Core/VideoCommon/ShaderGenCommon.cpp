@@ -90,6 +90,13 @@ std::string GetDiskShaderCacheFileName(APIType api_type, const char* type, bool 
     // We're using 21 bits, so 6 hex characters.
     ShaderHostConfig host_config = ShaderHostConfig::GetCurrent();
     filename += fmt::format("-{:06X}", host_config.bits);
+
+#if defined(__LIBRETRO__) && defined(__WEBOS__)
+    // The webOS core option toggles binding layout, which changes the
+    // generated GLSL
+    if (g_backend_info.bSupportsBindingLayout)
+      filename += "-bl";
+#endif
   }
 
   filename += ".cache";
