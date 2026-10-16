@@ -32,6 +32,7 @@
 #include "DolphinLibretro/Common/Globals.h"
 #include "DolphinLibretro/Common/Options.h"
 #include "DolphinLibretro/Video.h"
+#include "DolphinLibretro/VR.h"
 #include "DolphinLibretro/VideoContexts/ContextStatus.h"
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
 #include "InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPClient.h"
@@ -612,6 +613,9 @@ bool retro_load_game(const struct retro_game_info* game)
   Config::SetBase(Config::GFX_PERF_QUERIES_ENABLE,
                  Libretro::GetOption<bool>(gfx_gamespecific::GFX_PERF_QUERIES_ENABLE, /*def=*/false));
 
+  if (Libretro::VR::IsEnabled())
+    Libretro::VR::ApplyConfig();
+
 #ifdef CIFACE_USE_DUALSHOCKUDPCLIENT
   // wiimote - alternative input server
   {
@@ -839,6 +843,7 @@ void retro_unload_game(void)
   // Rest of shutdown
   g_context_status.MarkUnitialized();
   Libretro::Input::Shutdown();
+  Libretro::VR::Shutdown();
   Libretro::Log::Shutdown();
   UICommon::ShutdownControllers();
   UICommon::Shutdown();

@@ -16,6 +16,39 @@ class PointerWrap;
 struct PortableVertexDeclaration;
 class XFStateManager;
 
+#ifdef __LIBRETRO__
+// Head-tracked camera for the libretro core's immersive VR mode.
+struct LibretroVRCamera
+{
+  bool enabled = false;
+  // Set when the values below change, so the projection is reloaded.
+  bool dirty = false;
+  // Whether the projection currently loaded uses the headset camera, or the 2D screen.
+  bool applied = false;
+  bool screen_applied = false;
+  // Head rotation, applied after the game's view like the Free Look camera.
+  Common::Matrix44 view = Common::Matrix44::Identity();
+  // The headset's eye frustums averaged into one centred projection, in Dolphin's layout.
+  float scale_x = 1.0f;
+  float offset_x = 0.0f;
+  float scale_y = 1.0f;
+  float offset_y = 0.0f;
+  // How far the left eye's frustum sits from the centred one, in clip-space x per unit of w.
+  // The right eye's is the negation.
+  float eye_offset_x = 0.0f;
+  // Tangents of the game camera's half field of view, from its last projection; 0 until seen.
+  float game_tan_x = 0.0f;
+  float game_tan_y = 0.0f;
+  // The display's shape, for the 2D screen before the game camera is seen.
+  float display_aspect = 4.0f / 3.0f;
+  // What the draw being flushed samples. 2D drawn from a copy of the frame (bloom, blur, fades
+  // of the scene) must cover the scene exactly, so it is left at full size.
+  bool draw_textured = false;
+  bool draw_samples_copy = false;
+};
+extern LibretroVRCamera g_libretro_vr_camera;
+#endif
+
 // The non-API dependent parts.
 class alignas(16) VertexShaderManager
 {

@@ -9,6 +9,11 @@
 #include "VideoCommon/RenderState.h"
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/XFMemory.h"
+#ifdef __LIBRETRO__
+#include <cmath>
+
+#include "VideoCommon/VertexShaderManager.h"
+#endif
 
 static constexpr int LINE_PT_TEX_OFFSETS[8] = {0, 16, 8, 4, 2, 1, 1, 1};
 
@@ -62,6 +67,31 @@ void GeometryShaderManager::SetConstants(PrimitiveType prim)
     }
 
     constants.stereoparams[2] = g_ActiveConfig.stereo_convergence;
+
+#ifdef __LIBRETRO__
+    if (g_libretro_vr_camera.applied)
+    {
+      // Move each eye onto its own headset frustum as well as separating it. The shader adds
+      // hoffset * (w - convergence), so scaling the convergence keeps the separation's constant
+      // term while hoffset gains the frustum offset.
+      const float offset = g_ActiveConfig.stereo_depth;
+      const float eye_offset = g_libretro_vr_camera.eye_offset_x;
+      const float left = eye_offset - offset;
+      constants.stereoparams[0] = left;
+      constants.stereoparams[1] = -left;
+      constants.stereoparams[2] =
+          std::abs(left) > 1e-6f ? g_ActiveConfig.stereo_convergence * -offset / left : 0.0f;
+    }
+    else if (g_libretro_vr_camera.screen_applied)
+    {
+      // 2D has w = 1, so this moves each eye's copy of the screen onto its own frustum. Both
+      // eyes then see it in the same direction.
+      const float eye_offset = g_libretro_vr_camera.eye_offset_x;
+      constants.stereoparams[0] = eye_offset;
+      constants.stereoparams[1] = -eye_offset;
+      constants.stereoparams[2] = 0.0f;
+    }
+#endif
 
     dirty = true;
   }

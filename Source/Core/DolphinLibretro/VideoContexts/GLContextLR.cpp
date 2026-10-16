@@ -318,7 +318,7 @@ void* GLContextLR::GetFuncAddress(const std::string& name)
 bool GLContextLR::Initialize(const WindowSystemInfo& wsi, bool stereo, bool core)
 {
   const int efbScale = Libretro::Options::GetCached<int>(Libretro::Options::gfx_settings::EFB_SCALE, 1);
-  m_backbuffer_width = EFB_WIDTH * efbScale;
+  m_backbuffer_width = Libretro::Video::GetAdjustedBaseWidth() * efbScale;
   m_backbuffer_height = Libretro::Video::GetAdjustedBaseHeight() * efbScale;
 
   switch (Libretro::Video::hw_render.context_type)

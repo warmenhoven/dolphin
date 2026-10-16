@@ -39,6 +39,7 @@
 #include "DolphinLibretro/Input.h"
 #include "DolphinLibretro/Common/Options.h"
 #include "DolphinLibretro/Video.h"
+#include "DolphinLibretro/VR.h"
 #include "VideoBackends/OGL/OGLTexture.h"
 #include "VideoBackends/OGL/OGLGfx.h"
 #include "VideoCommon/AsyncRequests.h"
@@ -74,6 +75,8 @@ namespace Libretro
 {
 extern retro_environment_t environ_cb;
 static bool widescreen;
+// Whether the geometry last reported to the frontend was sized for VR
+static bool vr_frame;
 double g_core_refresh_rate{0};
 // Reset per game (see retro_run): the first refresh-rate settle after boot must not
 // trigger a mode-family reinit, only a real in-game 50<->60 switch should.
@@ -183,10 +186,10 @@ void retro_get_system_av_info(retro_system_av_info* info)
   // Fixed max (>= any runtime height) so base can grow via SET_GEOMETRY alone.
   int max_height = base_height > 576 ? base_height : 576;
 
-  info->geometry.base_width  = EFB_WIDTH * efbScale;
+  info->geometry.base_width  = Libretro::Video::GetAdjustedBaseWidth() * efbScale;
   info->geometry.base_height = base_height * efbScale;
 
-  info->geometry.max_width   = EFB_WIDTH * efbScale;
+  info->geometry.max_width   = Libretro::Video::GetAdjustedBaseWidth() * efbScale;
   info->geometry.max_height  = max_height * efbScale;
 
   if (g_widescreen)
@@ -195,6 +198,11 @@ void retro_get_system_av_info(retro_system_av_info* info)
     Libretro::widescreen = Config::Get(Config::SYSCONF_WIDESCREEN);
 
   info->geometry.aspect_ratio = Libretro::widescreen ? 16.0 / 9.0 : 4.0 / 3.0;
+
+  // The packed frame holds both eyes side by side
+  Libretro::vr_frame = Libretro::VR::IsEnabled();
+  if (Libretro::vr_frame)
+    info->geometry.aspect_ratio *= 2.0;
 
   Core::System& system = Core::System::GetInstance();
   double fps = system.GetVideoInterface().GetTargetRefreshRate();
@@ -324,7 +332,17 @@ void retro_run(void)
         ->SetSystemFrameBuffer((GLuint)Libretro::Video::hw_render.get_current_framebuffer());
   }
 
-  if (Libretro::Options::IsUpdated(Libretro::Options::gfx_settings::EFB_SCALE))
+  // Turning VR on or off doubles or halves the frame width, so resize it as for EFB scale.
+  bool vr_resized = false;
+  if (Libretro::Options::IsUpdated(Libretro::Options::gfx_settings::VR_MODE))
+  {
+    const bool vr_enabled = Libretro::VR::IsEnabled();
+    if (vr_enabled || Libretro::vr_frame)
+      Libretro::VR::ApplyConfig();
+    vr_resized = vr_enabled != Libretro::vr_frame;
+  }
+
+  if (Libretro::Options::IsUpdated(Libretro::Options::gfx_settings::EFB_SCALE) || vr_resized)
   {
     g_Config.iEFBScale = Libretro::Options::GetCached<int>(
       Libretro::Options::gfx_settings::EFB_SCALE);
@@ -410,13 +428,19 @@ void retro_run(void)
     Libretro::Input::ResetControllers(flags);
 
   if (Libretro::Options::IsUpdated(Libretro::Options::gfx_settings::ASPECT_RATIO))
-    Config::SetCurrent(
-      Config::GFX_ASPECT_RATIO, static_cast<AspectMode>(
-        Libretro::GetOption<int>(
-          Libretro::Options::gfx_settings::ASPECT_RATIO, static_cast<int>(AspectMode::Stretch)
+  {
+    // VR sets the aspect ratio together with its stereoscopy settings
+    if (Libretro::VR::IsEnabled())
+      Libretro::VR::ApplyConfig();
+    else
+      Config::SetCurrent(
+        Config::GFX_ASPECT_RATIO, static_cast<AspectMode>(
+          Libretro::GetOption<int>(
+            Libretro::Options::gfx_settings::ASPECT_RATIO, static_cast<int>(AspectMode::Stretch)
+          )
         )
-      )
-    );
+      );
+  }
 
   if (Libretro::Options::IsUpdated(Libretro::Options::gfx_hacks::EFB_TO_TEXTURE))
     g_Config.bSkipEFBCopyToRam = Libretro::Options::GetCached<bool>(Libretro::Options::gfx_hacks::EFB_TO_TEXTURE, true);
@@ -484,6 +508,8 @@ void retro_run(void)
 
   if (Config::Get(Config::MAIN_BLUETOOTH_PASSTHROUGH_ENABLED))
     Libretro::Input::BluetoothPassthroughBind();
+
+  Libretro::VR::Update(Libretro::widescreen ? 16.0f / 9.0f : 4.0f / 3.0f);
 
   RETRO_PERFORMANCE_INIT(dolphin_main_func);
   RETRO_PERFORMANCE_START(dolphin_main_func);

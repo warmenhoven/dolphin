@@ -559,6 +559,10 @@ void VertexManagerBase::Flush()
   CalculateNormals(VertexLoaderManager::GetCurrentVertexFormat());
   // Calculate ZSlope for zfreeze
   const auto used_textures = UsedTextures();
+#ifdef __LIBRETRO__
+  bool vr_textured = false;
+  bool vr_samples_copy = false;
+#endif
   std::vector<std::string> texture_names;
   Common::SmallVector<u32, 8> texture_units;
   std::array<SamplerState, 8> samplers;
@@ -571,6 +575,10 @@ void VertexManagerBase::Flush()
         const auto cache_entry = g_texture_cache->Load(i);
         if (!cache_entry)
           continue;
+#ifdef __LIBRETRO__
+        vr_textured = true;
+        vr_samples_copy |= cache_entry->IsCopy();
+#endif
         const float custom_tex_scale = cache_entry->GetWidth() / float(cache_entry->native_width);
         samplers[i] = TextureCacheBase::GetSamplerState(
             i, custom_tex_scale, cache_entry->is_custom_tex, cache_entry->has_arbitrary_mips);
@@ -583,6 +591,10 @@ void VertexManagerBase::Flush()
         const auto cache_entry = g_texture_cache->Load(i);
         if (cache_entry)
         {
+#ifdef __LIBRETRO__
+          vr_textured = true;
+          vr_samples_copy |= cache_entry->IsCopy();
+#endif
           if (!Common::Contains(texture_names, cache_entry->texture_info_name))
           {
             texture_names.push_back(cache_entry->texture_info_name);
@@ -596,6 +608,10 @@ void VertexManagerBase::Flush()
       }
     }
   }
+#ifdef __LIBRETRO__
+  g_libretro_vr_camera.draw_textured = vr_textured;
+  g_libretro_vr_camera.draw_samples_copy = vr_samples_copy;
+#endif
   vertex_shader_manager.SetConstants(texture_names, xf_state_manager);
   if (!bpmem.genMode.zfreeze)
   {
